@@ -13,4 +13,5 @@
 [train.md](docs/train.md)
 
 TODO
+- lier mlflow uri , mlflow run en local (penser en prod)
 - notebook for verification : X_train.csv, model.

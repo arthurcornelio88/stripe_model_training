@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 import mlflow
 from catboost import CatBoostClassifier
 from sklearn.metrics import classification_report, roc_auc_score
