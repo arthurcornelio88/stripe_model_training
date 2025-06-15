@@ -15,3 +15,5 @@ data/
 
 # Training
 catboost_info/
+mlruns/
+models/
