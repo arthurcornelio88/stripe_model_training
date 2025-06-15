@@ -12,3 +12,6 @@ wheels/
 # data
 data/
 .env
+
+# Training
+catboost_info/

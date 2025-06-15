@@ -1,0 +1,14 @@
+artifact_uri: file:///home/arthurcornelio88/jedha/automatic_fraud_detection_b3/model_training/mlruns/fb5a29e4be7244b6a19ab45efb1bbb5c/artifacts
+end_time: 1749990015084
+entry_point_name: ''
+experiment_id: '250773498674968951'
+lifecycle_stage: active
+run_id: fb5a29e4be7244b6a19ab45efb1bbb5c
+run_name: useful-panda-960
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1749990012794
+status: 3
+tags: []
+user_id: arthurcornelio88

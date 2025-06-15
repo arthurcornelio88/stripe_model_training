@@ -1,0 +1,14 @@
+artifact_uri: file:///home/arthurcornelio88/jedha/automatic_fraud_detection_b3/model_training/mlruns/6f9ff92f51e040e2a19b5f6fa45a4432/artifacts
+end_time: 1749989943704
+entry_point_name: ''
+experiment_id: '250773498674968951'
+lifecycle_stage: active
+run_id: 6f9ff92f51e040e2a19b5f6fa45a4432
+run_name: victorious-tern-652
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1749989941280
+status: 3
+tags: []
+user_id: arthurcornelio88

@@ -6,6 +6,13 @@ from dotenv import load_dotenv
 import os
 import argparse
 from glob import glob
+from mlflow.tracking import MlflowClient
+import requests
+from urllib.parse import urljoin
+import json
+import shutil
+
+
 
 # Load environment
 load_dotenv()
@@ -13,7 +20,7 @@ load_dotenv()
 ENV = os.getenv("ENV", "DEV")
 BUCKET = os.getenv("GCP_BUCKET")
 PREFIX = os.getenv("GCP_DATA_PREFIX")
-MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI")
+MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI").strip("/")
 EXPERIMENT = os.getenv("MLFLOW_EXPERIMENT")
 
 
@@ -104,15 +111,96 @@ def evaluate_model(model, X_test, y_test):
     print("🔄 Evaluating model...")
     return report, auc
 
+def check_mlflow_server(mlflow_uri, experiment_name="default"):
+    """
+    Ping MLflow server with a safe GET to verify availability.
+    Uses a valid API endpoint to avoid 404s.
+    """
+    try:
+        uri = mlflow_uri.rstrip("/") + "/"
+        health_url = urljoin(uri, f"api/2.0/mlflow/experiments/get-by-name?experiment_name={experiment_name}")
+        response = requests.get(health_url, timeout=3)
+        if response.status_code not in (200, 404):  # 404 here may still be valid (experiment not found)
+            raise RuntimeError(f"MLflow server responded with {response.status_code}: {response.text}")
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"❌ Could not connect to MLflow server at {mlflow_uri}: {e}")
 
-def log_mlflow(model, params, metrics):
+def save_and_log_report(report_dict, run_id, output_dir="reports"):
+    """
+    Sauvegarde le rapport au format JSON/HTML, puis l'upload dans MLflow.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    json_path = os.path.join(output_dir, "classification_report.json")
+    html_path = os.path.join(output_dir, "classification_report.html")
+
+    # Enregistrement local
+    with open(json_path, "w") as f:
+        json.dump(report_dict, f, indent=2)
+
+    html_content = "<html><head><title>Classification Report</title></head><body>"
+    html_content += "<h2>Classification Report</h2><table border='1'>"
+    html_content += "<tr><th>Label</th><th>Precision</th><th>Recall</th><th>F1-score</th><th>Support</th></tr>"
+
+    for label, scores in report_dict.items():
+        if isinstance(scores, dict):
+            html_content += f"<tr><td>{label}</td><td>{scores.get('precision', 0):.4f}</td>"
+            html_content += f"<td>{scores.get('recall', 0):.4f}</td><td>{scores.get('f1-score', 0):.4f}</td>"
+            html_content += f"<td>{scores.get('support', 0):.0f}</td></tr>"
+
+    html_content += "</table></body></html>"
+
+    with open(html_path, "w") as f:
+        f.write(html_content)
+
+    # Upload dans MLflow (dans artifacts/reports)
+    mlflow.log_artifact(json_path, artifact_path="reports")
+    mlflow.log_artifact(html_path, artifact_path="reports")
+
+    shutil.rmtree(output_dir)
+
+
+
+def log_mlflow(model, params, metrics, report):
+    """
+    Log model, parameters and metrics to MLflow.
+    Handles experiment creation and safe logging based on ENV.
+    """
+    print("🔄 Setting up MLflow logging...")
+
+    experiment_name = EXPERIMENT or "Fraud Detection CatBoost"
+    check_mlflow_server(MLFLOW_URI, experiment_name=experiment_name)
+
     mlflow.set_tracking_uri(MLFLOW_URI)
-    mlflow.set_experiment(EXPERIMENT)
-    print(f"🔄 Logging to MLflow: {MLFLOW_URI} | Experiment: {EXPERIMENT}")
-    with mlflow.start_run():
+
+    if ENV == "PROD":
+        artifact_location = f"gs://{BUCKET}/mlflow-artifacts"
+    else:
+        artifact_location = "file:./mlruns"
+
+    client = MlflowClient()
+    exp = client.get_experiment_by_name(experiment_name)
+    if exp is None:
+        exp_id = client.create_experiment(name=experiment_name, artifact_location=artifact_location)
+    else:
+        exp_id = exp.experiment_id
+
+    mlflow.set_experiment(experiment_name)
+    print(f"🔄 Logging to MLflow: {MLFLOW_URI} | Experiment: {experiment_name}")
+
+    with mlflow.start_run(experiment_id=exp_id):
         mlflow.log_params(params)
         mlflow.log_metrics(metrics)
-        mlflow.catboost.log_model(model, artifact_path="catboost_model")
+
+        mlflow.catboost.log_model(model, artifact_path="model")
+
+        model_uri = f"runs:/{mlflow.active_run().info.run_id}/model"
+        mlflow.register_model(
+            model_uri=model_uri,
+            name="CatBoostFraudDetector"
+        )
+
+        save_and_log_report(report, mlflow.active_run().info.run_id)
+
 
 
 def save_model(model, model_name="catboost_model.cbm"):
@@ -148,6 +236,7 @@ def main():
     parser.add_argument("--depth", type=int, default=6)
     parser.add_argument("--model_name", type=str, default="catboost_model.cbm")
     parser.add_argument("--test", action="store_true", help="Use minimal params for fast testing")
+    parser.add_argument("--fast", action="store_true", help="Run in fast dev mode (not full test, not full prod)")
     parser.add_argument("--timestamp", type=str, help="Timestamp to load specific preprocessed data")
 
     args = parser.parse_args()
@@ -166,14 +255,28 @@ def main():
             "random_seed": 42,
             "class_weights": [1, 10]
         }
+
+    elif args.fast:
+        print("🚀 Running in FAST DEV mode: semi-prod CatBoost config")
+        params = {
+            "iterations": 150,
+            "learning_rate": 0.07,
+            "depth": 5,
+            "loss_function": "Logloss",
+            "eval_metric": "AUC",
+            "verbose": 100,
+            "random_seed": 42,
+            "class_weights": [1, 15]
+        }
     else:
+        print("🏗️ Running in FULL PROD mode: full CatBoost config")
         params = {
             "iterations": args.iterations,
             "learning_rate": args.learning_rate,
             "depth": args.depth,
             "loss_function": "Logloss",
             "eval_metric": "AUC",
-            "verbose": 0,
+            "verbose": 100,
             "random_seed": 42,
             "class_weights": [1, 25]
         }
@@ -188,7 +291,7 @@ def main():
         "f1": report["1"]["f1-score"]
     }
 
-    log_mlflow(model, params, metrics)
+    log_mlflow(model, params, metrics, report)
     save_model(model, model_name=args.model_name)
 
     print("✅ Training complete.")

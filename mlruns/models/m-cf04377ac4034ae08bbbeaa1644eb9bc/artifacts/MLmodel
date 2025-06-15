@@ -1,0 +1,22 @@
+artifact_path: file:///home/arthurcornelio88/jedha/automatic_fraud_detection_b3/model_training/mlruns/models/m-cf04377ac4034ae08bbbeaa1644eb9bc/artifacts
+flavors:
+  catboost:
+    catboost_version: 1.2.8
+    code: null
+    data: model.cb
+    model_type: CatBoostClassifier
+    save_format: cbm
+  python_function:
+    data: model.cb
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.catboost
+    python_version: 3.13.2
+mlflow_version: 3.1.0
+model_id: m-cf04377ac4034ae08bbbeaa1644eb9bc
+model_size_bytes: 9624
+model_uuid: m-cf04377ac4034ae08bbbeaa1644eb9bc
+prompts: null
+run_id: fb5a29e4be7244b6a19ab45efb1bbb5c
+utc_time_created: '2025-06-15 12:20:12.882452'

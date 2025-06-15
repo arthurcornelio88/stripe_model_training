@@ -1,0 +1,6 @@
+artifact_location: file:///home/arthurcornelio88/jedha/automatic_fraud_detection_b3/model_training/mlruns
+creation_time: 1749989941198
+experiment_id: '250773498674968951'
+last_update_time: 1749989941198
+lifecycle_stage: active
+name: fraud_detection

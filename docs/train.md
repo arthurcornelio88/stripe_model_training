@@ -9,10 +9,63 @@ This script trains a **CatBoostClassifier** on preprocessed fraud detection data
 
 ---
 
+## ✅ Before Running the Script
+
+To track training runs and manage model versions, **MLflow** must be properly configured depending on your environment:
+
+### 🔧 DEV Mode
+
+Ensure your `.env` file includes:
+
+```env
+ENV=DEV
+MLFLOW_TRACKING_URI=http://localhost:5000
+```
+
+This will:
+
+* Track experiments locally at `http://localhost:5000`
+* Save artifacts to the local `mlruns/` folder
+* Store trained models in `models/`
+
+To spin up a local MLflow server:
+
+```bash
+mlflow server \
+  --backend-store-uri ./mlruns \
+  --default-artifact-root ./mlruns \
+  --host 127.0.0.1 \
+  --port 5000 \
+  --serve-artifacts
+```
+
+---
+
+### ☁️ PROD Mode
+
+In production, data and models are stored in Google Cloud Storage and tracked on a remote MLflow server. Set your `.env` like this:
+
+```env
+ENV=PROD
+GCP_BUCKET=my-bucket-name
+GCP_DATA_PREFIX=data/fraud-detection
+MLFLOW_TRACKING_URI=https://mlflow.mycompany.com
+```
+
+This will:
+
+* Load input datasets from `gs://my-bucket-name/data/fraud-detection/processed/`
+* Save models to `gs://my-bucket-name/models/`
+* Track MLflow runs at the provided remote URI
+
+> ⚠️ Make sure your environment has the right permissions (e.g. Google service account credentials via `GOOGLE_APPLICATION_CREDENTIALS`).
+
+---
+
 ## 🚀 Usage
 
 ```bash
-python train.py [options]
+python src/train.py [options]
 ```
 
 ### Available CLI options:
@@ -25,6 +78,7 @@ python train.py [options]
 | `--model_name`    | Name of the output model file                                  | `catboost_model.cbm`     |
 | `--timestamp`     | Use a specific timestamped dataset (format: `YYYYmmdd_HHMMSS`) | *(use latest available)* |
 | `--test`          | Enable fast training mode with minimal config                  | `False`                  |
+| `--fast`          | Run in fast dev mode (not full test, not full prod)            | `False`                  |
 
 ---
 

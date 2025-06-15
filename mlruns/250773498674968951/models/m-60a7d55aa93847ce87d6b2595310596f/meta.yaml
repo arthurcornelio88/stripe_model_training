@@ -1,0 +1,10 @@
+artifact_location: file:///home/arthurcornelio88/jedha/automatic_fraud_detection_b3/model_training/mlruns/models/m-60a7d55aa93847ce87d6b2595310596f/artifacts
+creation_timestamp: 1749990659768
+experiment_id: '250773498674968951'
+last_updated_timestamp: 1749990662893
+model_id: m-60a7d55aa93847ce87d6b2595310596f
+model_type: ''
+name: model
+source_run_id: b635ae59854e448d98b4a76aab2a7e4a
+status: 2
+status_message: null
