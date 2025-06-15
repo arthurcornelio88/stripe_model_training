@@ -1,0 +1,4 @@
+- create api for predictions
+- test it with some simple json
+- then, with batches from api link from Jedha
+--> do we do it here or in the dataops repo ?
