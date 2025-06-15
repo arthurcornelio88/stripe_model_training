@@ -1,0 +1,17 @@
+catboost>=1.2.8
+category-encoders>=2.8.1
+dotenv>=0.9.9
+evidently==0.4.19
+fastapi>=0.115.12
+gcsfs>=2025.5.1
+ipykernel>=6.29.5
+matplotlib>=3.10.3
+mlflow>=3.1.0
+numpy==1.26.4
+pandas>=2.3.0
+pytest>=8.4.0
+scikit-learn>=1.7.0
+seaborn>=0.13.2
+uvicorn>=0.34.3
+python-dotenv>=0.9.9
+

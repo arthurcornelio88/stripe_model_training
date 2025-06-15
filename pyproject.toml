@@ -8,6 +8,8 @@ dependencies = [
     "catboost>=1.2.8",
     "category-encoders>=2.8.1",
     "dotenv>=0.9.9",
+    "fastapi>=0.115.12",
+    "gcsfs>=2025.5.1",
     "ipykernel>=6.29.5",
     "matplotlib>=3.10.3",
     "mlflow>=3.1.0",
@@ -16,4 +18,5 @@ dependencies = [
     "pytest>=8.4.0",
     "scikit-learn>=1.7.0",
     "seaborn>=0.13.2",
+    "uvicorn>=0.34.3",
 ]

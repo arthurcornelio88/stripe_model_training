@@ -213,37 +213,15 @@ def save_model(model, model_name="catboost_model.cbm"):
     model.save_model(output_path)
     print(f"💾 Model saved to: {output_path}")
 
+def run_training(
+    timestamp: str = None,
+    test: bool = False,
+    fast: bool = False,
+    model_name: str = "catboost_model.cbm"
+):
+    X_train, X_test, y_train, y_test = load_data(timestamp=timestamp, test_mode=test)
 
-def main():
-    """
-    Train a CatBoostClassifier for fraud detection.
-
-    Reads data from GCS or local disk depending on ENV.
-    Supports timestamp-based data versioning.
-    Logs training to MLflow and saves model artifact.
-
-    CLI:
-    --iterations     Number of boosting rounds
-    --learning_rate  Learning rate
-    --depth          Tree depth
-    --model_name     Output filename for the model
-    --test           Run fast training with small params
-    --timestamp      Timestamp (YYYYmmdd_HHMMSS) to target a specific dataset version
-    """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--iterations", type=int, default=500)
-    parser.add_argument("--learning_rate", type=float, default=0.05)
-    parser.add_argument("--depth", type=int, default=6)
-    parser.add_argument("--model_name", type=str, default="catboost_model.cbm")
-    parser.add_argument("--test", action="store_true", help="Use minimal params for fast testing")
-    parser.add_argument("--fast", action="store_true", help="Run in fast dev mode (not full test, not full prod)")
-    parser.add_argument("--timestamp", type=str, help="Timestamp to load specific preprocessed data")
-
-    args = parser.parse_args()
-
-    X_train, X_test, y_train, y_test = load_data(timestamp=args.timestamp,test_mode=args.test)
-
-    if args.test:
+    if test:
         print("⚡️ Running in TEST mode: minimal CatBoost config")
         params = {
             "iterations": 10,
@@ -256,7 +234,7 @@ def main():
             "class_weights": [1, 10]
         }
 
-    elif args.fast:
+    elif fast:
         print("🚀 Running in FAST DEV mode: semi-prod CatBoost config")
         params = {
             "iterations": 150,
@@ -268,12 +246,13 @@ def main():
             "random_seed": 42,
             "class_weights": [1, 15]
         }
+
     else:
         print("🏗️ Running in FULL PROD mode: full CatBoost config")
         params = {
-            "iterations": args.iterations,
-            "learning_rate": args.learning_rate,
-            "depth": args.depth,
+            "iterations": 500,
+            "learning_rate": 0.05,
+            "depth": 6,
             "loss_function": "Logloss",
             "eval_metric": "AUC",
             "verbose": 100,
@@ -292,11 +271,29 @@ def main():
     }
 
     log_mlflow(model, params, metrics, report)
-    save_model(model, model_name=args.model_name)
+    save_model(model, model_name=model_name)
 
     print("✅ Training complete.")
     print(f"📊 AUC: {auc:.4f} | F1: {metrics['f1']:.4f}")
 
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--iterations", type=int, default=500)
+    parser.add_argument("--learning_rate", type=float, default=0.05)
+    parser.add_argument("--depth", type=int, default=6)
+    parser.add_argument("--model_name", type=str, default="catboost_model.cbm")
+    parser.add_argument("--test", action="store_true")
+    parser.add_argument("--fast", action="store_true")
+    parser.add_argument("--timestamp", type=str)
+
+    args = parser.parse_args()
+
+    run_training(
+        timestamp=args.timestamp,
+        test=args.test,
+        fast=args.fast,
+        model_name=args.model_name
+    )
 
 if __name__ == "__main__":
     main()

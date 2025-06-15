@@ -114,30 +114,76 @@ def encode_and_split(df: pd.DataFrame, output_dir: str, test_size=0.2, random_st
     print(f"➡️  Train size: {len(X_train)} | Test size: {len(X_test)} | Fraud ratio train: {y_train.mean():.4f}")
     return timestamp
 
+def encode_full_data(df: pd.DataFrame, output_dir: str) -> str:
+    """
+    Encode the full dataset using target encoding, without splitting.
+    Saves X_pred and y_pred.
+
+    Returns:
+        str: Timestamp used
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    y = df["is_fraud"]
+    X = df.drop(columns=["is_fraud"])
+
+    cat_cols = ["category", "job", "state", "merchant", "gender"]
+    encoder = TargetEncoder(cols=cat_cols)
+    X[cat_cols] = encoder.fit_transform(X[cat_cols], y)
+
+    if ENV == "DEV":
+        os.makedirs(output_dir, exist_ok=True)
+
+    X.to_csv(os.path.join(output_dir, f"X_pred_{timestamp}.csv"), index=False)
+    y.to_csv(os.path.join(output_dir, f"y_pred_{timestamp}.csv"), index=False)
+
+    print(f"✅ Prediction data saved to {output_dir}")
+    print(f"➡️  Rows: {len(X)} | Positive ratio: {y.mean():.4f}")
+    return timestamp
+
+def run_preprocessing(
+    input_path: str = "data/raw/fraudTest.csv",
+    output_dir: str = "data/processed",
+    log_amt: bool = True,
+    for_prediction: bool = False
+) -> str:
+    """
+    Fonction centrale pour API et CLI.
+    Effectue le prétraitement (split ou non) selon le mode.
+    """
+    print(f"🔄 ENV = {ENV} | Reading from: {input_path}")
+
+    df = pd.read_csv(input_path)
+    df_clean = preprocess(df, log_amt=log_amt)
+
+    if for_prediction:
+        print("🟢 Prediction-only mode (no train/test split)")
+        timestamp = encode_full_data(df_clean, output_dir)
+    else:
+        print("🧪 Training mode (split + encode)")
+        timestamp = encode_and_split(df_clean, output_dir)
+
+    return timestamp
+
 
 def main():
-    """
-    CLI entrypoint. Preprocesses and splits fraud dataset depending on ENV.
-
-    In DEV mode, you can pass:
-    --input_path      Custom input file (default: data/raw/fraudTest.csv)
-    --output_dir      Custom output directory (default: data/processed)
-    --no_log_amt      Disable log transformation on 'amt'
-    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_path", type=str, default="data/raw/fraudTest.csv")
     parser.add_argument("--output_dir", type=str, default="data/processed")
     parser.add_argument("--no_log_amt", action="store_true")
+    parser.add_argument("--for_prediction", action="store_true")
+
     args = parser.parse_args()
 
     input_path = resolve_path("fraudTest.csv", io="input") if ENV == "PROD" else args.input_path
     output_dir = resolve_path("", io="output") if ENV == "PROD" else args.output_dir
 
-    print(f"🔄 ENV = {ENV} | Reading from: {input_path}")
-
-    df = pd.read_csv(input_path)
-    df_clean = preprocess(df, log_amt=not args.no_log_amt)
-    encode_and_split(df_clean, output_dir)
+    run_preprocessing(
+        input_path=input_path,
+        output_dir=output_dir,
+        log_amt=not args.no_log_amt,
+        for_prediction=args.for_prediction
+    )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+
+  model-api:
+    build:
+      context: ./model_training_api
+    container_name: model-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./model_training_api:/app/model_training_api
+      - ./data:/app/data
+      - ./models:/app/models
+    networks:
+      - mlnet
+
+  # mock-api:
+  #   build:
+  #     context: ./mock_realtime_api
+  #   container_name: mock-api
+  #   ports:
+  #     - "8001:8000"
+  #   env_file:
+  #     - .env
+  #   networks:
+  #     - mlnet
+
+networks:
+  mlnet:
+    driver: bridge
