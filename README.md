@@ -13,4 +13,4 @@
 [train.md](docs/train.md)
 
 - notebook for verification : X_train.csv, model.
-- start dataops repo
+- quick api for predictions
