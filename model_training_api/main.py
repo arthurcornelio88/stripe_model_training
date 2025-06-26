@@ -48,7 +48,7 @@ import re
 class TrainRequest(BaseModel):
     timestamp: Optional[str] = Field(
         default=None,
-        description="Timestamp au format YYYYmmdd_HHMMSS ou null pour utiliser le plus récent"
+        description="Timestamp au format YYYYmmdd_HHMMSS ou null pour utiliser le plus récent!"
     )
     test: Optional[bool] = False
     fast: Optional[bool] = False
