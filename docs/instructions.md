@@ -107,7 +107,7 @@ Each module is containerized and connected via `docker-compose` (dev), and desig
 * [x] Dockerize APIs and run via `docker-compose`
 * [x] Testing API endpoints
   *  [x] `preprocess` ok in dev
-  *  [] `train` todo
+  *  [x] `train` ok in dev
   *  [] `predict` todo
   *  [] `validate` todo
   *  [] `monitor` todo
