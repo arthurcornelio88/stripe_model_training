@@ -9,6 +9,12 @@ http://localhost:8000
 ```
 
 ---
+## 🔹 0. Launch API
+
+It launches model_training_api, with all endpoints and mlflow container, for model tracking.
+```bash
+docker compose up
+```
 
 ## 🔹 1. `/preprocess` — Clean and encode raw dataset
 
