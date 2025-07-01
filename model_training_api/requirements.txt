@@ -14,6 +14,6 @@ scikit-learn>=1.7.0
 seaborn>=0.13.2
 uvicorn>=0.34.3
 python-dotenv>=0.9.9
-scipy==1.11.4                 # ✅ added
-statsmodels==0.14.0           # ✅ added
+scipy==1.11.4               
+statsmodels==0.14.0           
 setuptools>=67.0.0

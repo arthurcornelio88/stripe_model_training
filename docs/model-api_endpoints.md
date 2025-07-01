@@ -58,7 +58,7 @@ curl -X POST http://localhost:8000/preprocess \
 ```bash
 curl -X POST http://localhost:8000/train \
   -H "Content-Type: application/json" \
-  -d '{"timestamp": "20250615_204742", "test": false}'
+  -d '{"timestamp": "<timestamp>", "test": false}'
 ```
 
 ---
@@ -72,7 +72,7 @@ curl -X POST http://localhost:8000/train \
 ```json
 {
   "model_name": "catboost_model.cbm",
-  "timestamp": "20250615_204742"
+  "timestamp": "<timestamp>"
 }
 ```
 
@@ -81,9 +81,9 @@ curl -X POST http://localhost:8000/train \
 ```bash
 curl -X POST http://localhost:8000/validate \
   -H "Content-Type: application/json" \
-  -d '{"model_name": "catboost_model.cbm", "timestamp": "20250615_204742"}'
+  -d '{"model_name": "catboost_model.cbm", "timestamp": <timestamp>}'
 ```
-
+> Pay attention to change the timestamp according to your horodated data.
 ---
 
 ## 🔹 4. `/predict` — Run batch inference
@@ -94,7 +94,7 @@ curl -X POST http://localhost:8000/validate \
 
 ```json
 {
-  "input_path": "data/processed/X_pred_20250615_204742.csv",
+  "input_path": "data/processed/X_pred_<timestamp>.csv",
   "model_name": "catboost_model.cbm",
   "output_path": "data/predictions.csv"
 }
@@ -105,21 +105,22 @@ curl -X POST http://localhost:8000/validate \
 ```bash
 curl -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
-  -d '{"input_path": "data/processed/X_pred_20250615_204742.csv", "model_name": "catboost_model.cbm", "output_path": "data/predictions.csv"}'
+  -d '{"input_path": "data/processed/X_pred_<timestamp>.csv", "model_name": "catboost_model.cbm", "output_path": "data/predictions.csv"}'
 ```
+> In local, predictions will be saved on `data/predictions.csv`.
 
 ---
 
 ## 🔹 5. `/monitor` — Compare reference and production data for drift
 
-**Purpose:** Generate an HTML report on data drift between two batches.
+**Purpose:** Generate an HTML report and a exploitable JSON on data drift between two batches. If a data drift is detected, it will be signaled in Json response, like `"drift_summary":{"drift_detected":false}`
 
 ### 🔸 JSON Body
 
 ```json
 {
-  "reference_path": "data/processed/X_test_20250615_204742.csv",
-  "current_path": "data/processed/X_pred_20250616_153842.csv",
+  "reference_path": "data/processed/X_test_<timestamp>.csv",
+  "current_path": "data/processed/X_pred_<timestamp>.csv",
   "output_html": "reports/data_drift.html"
 }
 ```
@@ -130,8 +131,8 @@ curl -X POST http://localhost:8000/predict \
 curl -X POST http://localhost:8000/monitor \
   -H "Content-Type: application/json" \
   -d '{
-    "reference_path": "data/processed/X_test_20250615_204742.csv",
-    "current_path": "data/processed/X_pred_20250616_153842.csv",
+    "reference_path": "data/processed/X_test_<timestamp>.csv",
+    "current_path": "data/processed/X_pred_<timestamp>.csv",
     "output_html": "reports/data_drift.html"
   }'
 ```

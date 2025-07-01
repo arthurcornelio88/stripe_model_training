@@ -86,8 +86,6 @@ def validate_model_endpoint(request: ValidateRequest):
     )
     return {"status": "model validated", **result}
 
-
-
 class PredictRequest(BaseModel):
     input_path: str
     model_name: Optional[str] = "catboost_model.cbm"
@@ -114,12 +112,45 @@ class DriftRequest(BaseModel):
 
 @app.post("/monitor")
 def monitor_drift(request: DriftRequest):
+    import json
 
+    # Charger les données
     ref = read_csv_flexible(request.reference_path, env=ENV)
     curr = read_csv_flexible(request.current_path, env=ENV)
 
-    report = Report(metrics=[DataDriftPreset()])
+    # Générer le rapport
+    # Exemple : plus sensible (20%)
+    preset = DataDriftPreset(drift_share_threshold=0.2)
+    report = Report(metrics=[preset])
     report.run(reference_data=ref, current_data=curr)
-    os.makedirs(os.path.dirname(request.output_html), exist_ok=True)
-    report.save_html(request.output_html)
-    return {"status": "drift report generated", "report_path": request.output_html}
+
+    # Sauvegarder HTML
+    abs_path_html = os.path.abspath(request.output_html)
+    os.makedirs(os.path.dirname(abs_path_html), exist_ok=True)
+    report.save_html(abs_path_html)
+
+    # Sauvegarder JSON
+    json_path = abs_path_html.replace(".html", ".json")
+    report_dict = report.as_dict()
+    with open(json_path, "w") as f:
+        json.dump(report_dict, f, indent=2)
+
+    # Extraire les résultats
+    drift_summary = {}
+    for metric in report_dict.get("metrics", []):
+        if metric.get("metric") == "DataDriftTable":
+            result = metric.get("result", {})
+            drift_summary = {
+                "drift_detected": result.get("dataset_drift", False),
+                "n_drifted_columns": result.get("number_of_drifted_columns", 0),
+                "share_drifted_columns": result.get("share_of_drifted_columns", 0.0),
+                "drifted_columns": list(result.get("drift_by_columns", {}).keys()),
+            }
+            break
+
+    return {
+        "status": "drift report generated",
+        "report_html": abs_path_html,
+        "report_json": json_path,
+        "drift_summary": drift_summary
+    }

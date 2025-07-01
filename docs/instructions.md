@@ -108,11 +108,11 @@ Each module is containerized and connected via `docker-compose` (dev), and desig
 * [x] Testing API endpoints
   *  [x] `preprocess` ok in dev
   *  [x] `train` ok in dev
-  *  [] `predict` todo
-  *  [] `validate` todo
-  *  [] `monitor` todo
-* [] Build `mock_realtime_api` with realistic transaction format
-* [] Dockerize APIs and run via `docker-compose`
+  *  [x] `predict` ok in dev
+  *  [x] `validate` ok in dev
+  *  [x] `monitor` ok in dev
+* [x] Build `mock_realtime_api` with realistic transaction format
+* [x] Dockerize APIs and run via `docker-compose`
 
 ### Phase 3 – Production & Automation
 
