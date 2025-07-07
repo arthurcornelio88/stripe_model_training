@@ -1,13 +1,13 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
 from typing import Optional
 import os
-import pandas as pd
+import re
 
-from model_training_api.src import preprocessing
 from model_training_api.src.train import run_training
 from model_training_api.src.predict import run_prediction
 from model_training_api.src.validate_model import run_validation
+from model_training_api.src.preprocessing import run_preprocessing
 
 from model_training_api.utils.file_io import read_csv_flexible
 
@@ -22,8 +22,6 @@ ENV = os.getenv("ENV", "DEV")
 def ping():
     return {"status": "alive"}
 
-
-from model_training_api.src.preprocessing import run_preprocessing
 
 class PreprocessRequest(BaseModel):
     input_path: str
@@ -41,9 +39,6 @@ def preprocess_endpoint(request: PreprocessRequest):
     )
     return {"status": "done", "timestamp": timestamp}
 
-from pydantic import BaseModel, Field, validator
-from typing import Optional
-import re
 
 class TrainRequest(BaseModel):
     timestamp: Optional[str] = Field(
