@@ -131,8 +131,8 @@ def encode_full_data(df: pd.DataFrame, output_dir: str) -> str:
     encoder = TargetEncoder(cols=cat_cols)
     X[cat_cols] = encoder.fit_transform(X[cat_cols], y)
 
-    if ENV == "DEV":
-        os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"🔄 Splitting and encoding data, saving to {output_dir}")
 
     X.to_csv(os.path.join(output_dir, f"X_pred_{timestamp}.csv"), index=False)
     y.to_csv(os.path.join(output_dir, f"y_pred_{timestamp}.csv"), index=False)

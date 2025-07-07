@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 from pydantic import BaseModel, Field, validator
-from typing import Optional
+from typing import Optional, List, Dict
 import os
 import re
+import pandas as pd
+from uuid import uuid4
 
 from model_training_api.src.train import run_training
 from model_training_api.src.predict import run_prediction
@@ -37,6 +39,33 @@ def preprocess_endpoint(request: PreprocessRequest):
         log_amt=request.log_amt,
         for_prediction=request.for_prediction
     )
+    return {"status": "done", "timestamp": timestamp}
+
+class PreprocessDirectRequest(BaseModel):
+    data: List[Dict]
+    output_dir: Optional[str] = "data/processed"
+    log_amt: Optional[bool] = True
+    for_prediction: Optional[bool] = True
+
+@app.post("/preprocess_direct")
+def preprocess_direct(request: PreprocessDirectRequest):
+    tmp_dir = "/app/shared_data/tmp"
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    tmp_input = os.path.join(tmp_dir, f"raw_input_{uuid4().hex}.csv")
+    df = pd.DataFrame(request.data)
+    df.to_csv(tmp_input, index=False)
+
+    # 🔥 FORCE shared_data
+    output_dir = "/app/shared_data"
+
+    timestamp = run_preprocessing(
+        input_path=tmp_input,
+        output_dir=output_dir,
+        log_amt=request.log_amt,
+        for_prediction=request.for_prediction
+    )
+
     return {"status": "done", "timestamp": timestamp}
 
 
@@ -88,6 +117,10 @@ class PredictRequest(BaseModel):
 
 @app.post("/predict")
 def predict_endpoint(request: PredictRequest):
+    print(f"📥 Predict input = {request.input_path}")
+
+    assert os.path.exists(request.input_path), f"❌ Input path not found: {request.input_path}"
+    os.makedirs(os.path.dirname(request.output_path), exist_ok=True)  # 🔧 juste au cas où
     # Assure que fichier existe (lecture pour validation)
     df = read_csv_flexible(request.input_path, env=ENV)
     df.shape  # déclenche l’erreur si non lisible
