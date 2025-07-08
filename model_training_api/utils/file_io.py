@@ -5,12 +5,13 @@ import os
 
 def read_csv_flexible(path: str, env: Literal["DEV", "PROD"] = "DEV") -> pd.DataFrame:
     if env == "DEV":
+        if not os.path.isabs(path):
+            path = os.path.join("/app/shared_data", path)
         if not os.path.exists(path):
             raise HTTPException(status_code=400, detail=f"File not found: {path}")
         return pd.read_csv(path)
-    
     elif env == "PROD":
-        # 🚧 Préparé pour future intégration GCS
+        # 🚧 Intégration GCS future
         from google.cloud import storage
         import io
 
@@ -27,3 +28,4 @@ def read_csv_flexible(path: str, env: Literal["DEV", "PROD"] = "DEV") -> pd.Data
     
     else:
         raise HTTPException(status_code=500, detail="Invalid ENV value")
+

@@ -146,14 +146,38 @@ def monitor_drift(request: DriftRequest):
     ref = read_csv_flexible(request.reference_path, env=ENV)
     curr = read_csv_flexible(request.current_path, env=ENV)
 
+    ref = read_csv_flexible(request.reference_path, env=ENV)
+
+    # 🧹 Clean colonnes parasites
+    if "Unnamed: 0" in ref.columns:
+        ref = ref.drop(columns=["Unnamed: 0"])
+
+    # ⚡️ Sous-échantillonner la référence pour correspondre à la taille du current
+    curr = read_csv_flexible(request.current_path, env=ENV)
+    if "Unnamed: 0" in curr.columns:
+        curr = curr.drop(columns=["Unnamed: 0"])
+
+    sample_size = min(len(ref), 5 * len(curr))  # Ex: 2500 lignes max si curr en a 500
+    ref = ref.sample(n=sample_size, random_state=42)
+
+    print(f"📂 REF PATH = {request.reference_path}")
+    print(f"📂 CURR PATH = {request.current_path}")
+    print(f"📂 ENV = {ENV}")
+
+    print("📑 REF columns:", ref.columns.tolist())
+    print("📑 CURR columns:", curr.columns.tolist())
+
     # Générer le rapport
     # Exemple : plus sensible (20%)
-    preset = DataDriftPreset(drift_share_threshold=0.2)
+    preset = DataDriftPreset(drift_share=0.2)
     report = Report(metrics=[preset])
     report.run(reference_data=ref, current_data=curr)
 
-    # Sauvegarder HTML
-    abs_path_html = os.path.abspath(request.output_html)
+    # Définir le nom du rapport HTML
+    output_html_rel = request.output_html
+    abs_path_html = os.path.join("/app/shared_data", output_html_rel)
+
+    # Sauvegarde HTML
     os.makedirs(os.path.dirname(abs_path_html), exist_ok=True)
     report.save_html(abs_path_html)
 

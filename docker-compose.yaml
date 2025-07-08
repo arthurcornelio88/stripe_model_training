@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
 
   model-api:
@@ -41,6 +39,7 @@ services:
     volumes:
       - ./mock_realtime_api:/app/mock_realtime_api
       - ./data:/app/data
+      - ../shared_data:/app/shared_data
     env_file:
       - .env
     networks:

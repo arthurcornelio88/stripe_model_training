@@ -1,14 +1,22 @@
 from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import List
 from faker import Faker
 from datetime import datetime
 import random
+import pandas as pd
 
 app = FastAPI()
 fake = Faker()
 
+# === Static data (replace path if needed)
+FRAUD_DATA_PATH = "/app/shared_data/fraudTest.csv"
+
+# Load once at startup
+fraud_df = pd.read_csv(FRAUD_DATA_PATH, dtype={"cc_num": str, "zip": str})
+
+# === Faker categories
 CATEGORIES = ["personal_care", "health_fitness", "misc_pos", "travel", "food", "shopping", "gas_transport"]
 JOBS = ["Engineer", "Teacher", "Artist", "Doctor", "Sales"]
 STATES = ["CA", "NY", "TX", "FL", "IL"]
@@ -67,5 +75,34 @@ def generate_transaction() -> Transaction:
     )
 
 @app.get("/transactions", response_model=List[Transaction])
-def get_transactions(n: int = Query(10, ge=1, le=1000, description="Number of transactions to generate (1-1000)")):
-    return [generate_transaction() for _ in range(n)]
+def get_transactions(
+    n: int = Query(10, ge=1, le=1000, description="Number of transactions"),
+    variability: str = Query("high", enum=["low", "medium", "high"])
+):
+    if variability == "low":
+        sampled = fraud_df.sample(n=n).to_dict(orient="records")
+        print(f"[LOW] Returning {n} real transactions.")
+        return sampled
+
+    elif variability == "high":
+        generated = [generate_transaction().dict() for _ in range(n)]
+        print(f"[HIGH] Returning {n} synthetic transactions.")
+        return generated
+
+    elif variability == "medium":
+        ratio_real = round(random.uniform(0.1, 0.9), 2)
+        n_real = int(n * ratio_real)
+        n_fake = n - n_real
+
+        real_part = fraud_df.sample(n=n_real).to_dict(orient="records")
+        fake_part = [generate_transaction().dict() for _ in range(n_fake)]
+
+        combined = real_part + fake_part
+        random.shuffle(combined)
+
+        print(f"[MEDIUM] Returning {n_real} real & {n_fake} fake (ratio_real={ratio_real})")
+
+        # Optionally return ratio in header
+        response = JSONResponse(content=combined)
+        response.headers["X-Ratio-Real"] = str(ratio_real)
+        return response
