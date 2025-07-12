@@ -50,7 +50,13 @@ def preprocess(df: pd.DataFrame, log_amt=True) -> pd.DataFrame:
     - Creates age, temporal features, and distance
     - Applies log transformation to 'amt' if enabled
     """
-    df = df.drop(columns=["first", "last", "street", "trans_num", "unix_time", "city"])
+    # Supprimer seulement les colonnes qui existent
+    cols_to_drop = ["first", "last", "street", "trans_num", "unix_time", "city"]
+    existing_cols_to_drop = [col for col in cols_to_drop if col in df.columns]
+    if existing_cols_to_drop:
+        df = df.drop(columns=existing_cols_to_drop)
+        print(f"🧹 Dropped columns: {existing_cols_to_drop}")
+    
     df["trans_date_trans_time"] = pd.to_datetime(df["trans_date_trans_time"])
     df["dob"] = pd.to_datetime(df["dob"])
 

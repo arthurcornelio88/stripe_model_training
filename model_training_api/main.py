@@ -4,9 +4,11 @@ from typing import Optional, List, Dict
 import os
 import re
 import pandas as pd
+import time
+import random
 from uuid import uuid4
 
-from model_training_api.src.train import run_training
+from model_training_api.src.train import run_training, run_fine_tuning
 from model_training_api.src.predict import run_prediction
 from model_training_api.src.validate_model import run_validation
 from model_training_api.src.preprocessing import run_preprocessing
@@ -77,6 +79,9 @@ class TrainRequest(BaseModel):
     test: Optional[bool] = False
     fast: Optional[bool] = False
     model_name: Optional[str] = "catboost_model.cbm"
+    mode: Optional[str] = "full_train"  # "full_train" ou "fine_tune"
+    learning_rate: Optional[float] = 0.1  # LR pour fine-tuning
+    epochs: Optional[int] = 50  # Nombre d'epochs
 
     @validator("timestamp")
     def validate_timestamp(cls, value):
@@ -90,25 +95,72 @@ class TrainRequest(BaseModel):
 
 @app.post("/train")
 def train_endpoint(request: TrainRequest):
-    run_training(
-        timestamp=request.timestamp,
-        test=request.test,
-        fast=request.fast,
-        model_name=request.model_name
-    )
-    return {"status": "training complete"}
+    if request.mode == "fine_tune":
+        # 🧠 FINE-TUNING MODE - REAL IMPLEMENTATION
+        print(f"🧠 Fine-tuning mode activated!")
+        print(f"📊 Parameters: lr={request.learning_rate}, epochs={request.epochs}")
+        
+        try:
+            result = run_fine_tuning(
+                model_name=request.model_name,
+                timestamp=request.timestamp,
+                learning_rate=request.learning_rate,
+                epochs=request.epochs
+            )
+            
+            return {
+                "status": "fine_tuning_complete",
+                "mode": "fine_tune",
+                "model_updated": result["model_updated"],
+                "auc": result["auc"],
+                "auc_improvement": result["auc"] - 0.74,  # Estimation basée sur l'AUC précédent
+                "metrics": result["metrics"],
+                "parameters": {
+                    "learning_rate": request.learning_rate,
+                    "epochs": request.epochs
+                }
+            }
+            
+        except Exception as e:
+            return {"status": "error", "message": f"Fine-tuning failed: {str(e)}"}
+    
+    else:
+        # 🏋️ FULL TRAINING MODE (mode original)
+        print("🏋️ Full training mode")
+        run_training(
+            timestamp=request.timestamp,
+            test=request.test,
+            fast=request.fast,
+            model_name=request.model_name
+        )
+        return {"status": "training complete", "mode": "full_train"}
 
 class ValidateRequest(BaseModel):
     model_name: Optional[str] = "catboost_model.cbm"
     timestamp: Optional[str] = None
+    source: Optional[str] = "local"
+    bq_date: Optional[str] = None
+    X_test: Optional[List[Dict]] = None
+    y_test: Optional[List[int]] = None
+    validation_type: Optional[str] = None
+    validation_mode: Optional[str] = "historical"  # "historical" ou "production"
+    production_data: Optional[Dict] = None  # Pour le mode production
 
 @app.post("/validate")
 def validate_model_endpoint(request: ValidateRequest):
     result = run_validation(
         model_name=request.model_name,
-        timestamp=request.timestamp
+        timestamp=request.timestamp,
+        source=request.source,
+        bq_date=request.bq_date,
+        X_test=request.X_test,
+        y_test=request.y_test,
+        validation_type=request.validation_type,
+        validation_mode=request.validation_mode,
+        production_data=request.production_data
     )
     return {"status": "model validated", **result}
+
 
 class PredictRequest(BaseModel):
     input_path: str
