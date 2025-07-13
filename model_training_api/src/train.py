@@ -14,8 +14,6 @@ import shutil
 
 
 
-# Load environment
-load_dotenv()
 
 ENV = os.getenv("ENV", "DEV")
 BUCKET = os.getenv("GCP_BUCKET")
@@ -332,116 +330,24 @@ def run_fine_tuning(
     epochs: int = 10
 ):
     """
-    Run fine-tuning on an existing model with recent data.
+    Run fine-tuning on an existing model with preprocessed data.
+    
+    Le DAG s'occupe de :
+    - Récupérer les données BigQuery
+    - Les preprocesser avec /preprocess_direct
+    
+    L'API s'occupe de :
+    - Charger les données déjà preprocessées
+    - Faire le fine-tuning
     """
     print(f"🧠 Starting fine-tuning for model: {model_name}")
+    print(f"🔍 Using preprocessed data with timestamp: {timestamp}")
     
-    # 🔧 PREPROCESSING D'ABORD ! Appeler l'endpoint de preprocessing
-    print("🔄 First, calling preprocessing endpoint to prepare fresh data...")
+    # Charger les données préprocessées (déjà préparées par le DAG)
+    X_train, X_test, y_train, y_test = load_data(timestamp=timestamp, test_mode=False)
     
-    try:
-        # Appeler l'endpoint de preprocessing
-        preprocess_url = "http://localhost:8000/preprocess"
-        response = requests.post(preprocess_url, json={}, timeout=300)  # 5 minutes timeout
-        
-        if response.status_code == 200:
-            result = response.json()
-            print(f"✅ Preprocessing completed: {result}")
-            
-            # Récupérer le timestamp des données fraîches
-            fresh_timestamp = result.get("timestamp")
-            if fresh_timestamp:
-                print(f"🔍 Using fresh preprocessed data with timestamp: {fresh_timestamp}")
-            else:
-                print("🔍 Using most recent preprocessed data")
-        else:
-            print(f"⚠️ Preprocessing failed with status {response.status_code}: {response.text}")
-            print("🔄 Falling back to existing preprocessed data...")
-            fresh_timestamp = None
-            
-    except requests.exceptions.RequestException as e:
-        print(f"⚠️ Could not call preprocessing endpoint: {e}")
-        print("🔄 Falling back to existing preprocessed data...")
-        fresh_timestamp = None
-    
-    # Charger les données (fraîches si preprocessing ok, sinon les plus récentes)
-    X_train, X_test, y_train, y_test = load_data(timestamp=fresh_timestamp, test_mode=False)
-    
-    # 🧹 NETTOYER LES DONNÉES - Enlever les colonnes timestamp/string
-    print("🧹 Cleaning training data for fine-tuning...")
-    
-    def clean_data(df):
-        """Nettoyer les données comme dans le DAG"""
-        df_clean = df.copy()
-        cols_to_drop = []
-        
-        for col in df_clean.columns:
-            if df_clean[col].dtype == "object":
-                # Garder seulement les colonnes catégorielles connues
-                if col not in ["category", "merchant", "job", "state", "city_pop"]:
-                    cols_to_drop.append(col)
-        
-        # Supprimer aussi les colonnes timestamp spécifiques
-        cols_to_drop.extend(["ingestion_ts", "created_at", "updated_at"])
-        cols_to_drop = [col for col in cols_to_drop if col in df_clean.columns]
-        
-        if cols_to_drop:
-            print(f"🧹 Removing columns: {cols_to_drop}")
-            df_clean = df_clean.drop(columns=cols_to_drop)
-        
-        return df_clean
-    
-    # Nettoyer les datasets
-    X_train = clean_data(X_train)
-    X_test = clean_data(X_test)
-    
-    # 🔧 ALIGNEMENT EXACT DES COLONNES - Logique du DAG avec ORDRE PRÉSERVÉ
-    # Charger le fichier de référence (fraudTest.csv) pour récupérer les colonnes du modèle original
-    shared_dir = "/app/shared_data"
-    ref_path = os.path.join(shared_dir, "fraudTest.csv")
-    
-    if os.path.exists(ref_path):
-        print("📋 Loading reference data to match model columns...")
-        df_ref = pd.read_csv(ref_path)
-        
-        # 🔧 ORDRE DE RÉFÉRENCE EXACT (selon le header du fichier)
-        # Unnamed: 0,trans_date_trans_time,cc_num,merchant,category,amt,first,last,gender,street,city,state,zip,lat,long,city_pop,job,dob,trans_num,unix_time,merch_lat,merch_long,is_fraud
-        reference_order = [
-            "Unnamed: 0", "trans_date_trans_time", "cc_num", "merchant", "category", "amt",
-            "first", "last", "gender", "street", "city", "state", "zip", "lat", "long",
-            "city_pop", "job", "dob", "trans_num", "unix_time", "merch_lat", "merch_long", "is_fraud"
-        ]
-        
-        # Nettoyer le fichier de référence de la même façon
-        df_ref_clean = clean_data(df_ref)
-        
-        # 🔧 CRITICAL: Utiliser l'ordre de référence exact, mais seulement les colonnes nettoyées
-        # Trouver les colonnes communes dans l'ordre de référence
-        common_cols = [col for col in reference_order if col in df_ref_clean.columns and col in X_train.columns]
-        
-        # Filtrer les données de fine-tuning pour avoir EXACTEMENT les mêmes colonnes dans le BON ORDRE
-        X_train = X_train[common_cols]
-        X_test = X_test[common_cols]
-        
-        print(f"📊 Reference order: {reference_order[:10]}...")
-        print(f"📊 Common columns for fine-tuning (in model order): {common_cols}")
-        print(f"✅ Data aligned. X_train shape: {X_train.shape}, X_test shape: {X_test.shape}")
-        
-        # 🔍 Debug: Vérifier l'ordre des colonnes
-        print(f"🔍 First 5 columns in order: {X_train.columns[:5].tolist()}")
-        print(f"🔍 Reference first 5 columns: {df_ref_clean.columns[:5].tolist()}")
-        
-    else:
-        print("⚠️ Reference file not found, falling back to basic cleaning...")
-        # Fallback : supprimer uniquement les colonnes parasites
-        if "Unnamed: 0" in X_train.columns:
-            X_train = X_train.drop(columns=["Unnamed: 0"])
-        if "Unnamed: 0" in X_test.columns:
-            X_test = X_test.drop(columns=["Unnamed: 0"])
-        
-        print(f"✅ Data cleaned. X_train shape: {X_train.shape}, X_test shape: {X_test.shape}")
-    
-    print(f"🔍 Final X_train columns: {list(X_train.columns)}")
+    print(f"� Loaded preprocessed data: X_train {X_train.shape}, X_test {X_test.shape}")
+    print(f"🔍 Columns: {list(X_train.columns[:5])}..." if len(X_train.columns) > 5 else f"🔍 Columns: {list(X_train.columns)}")
     
     # Prendre seulement une partie des données pour fine-tuning (ex: 20%)
     sample_size = min(len(X_train) // 5, 2000)  # Maximum 2000 samples
