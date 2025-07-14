@@ -9,15 +9,19 @@ load_dotenv()
 
 ENV = os.getenv("ENV", "DEV")
 BUCKET = os.getenv("GCP_BUCKET")
-PREFIX = os.getenv("GCP_DATA_PREFIX")
+SHARED_DATA_PATH = os.getenv("SHARED_DATA_PATH")
 
-def gcs_path(filename):
-    return f"gs://{BUCKET}/{PREFIX}/{filename}"
+def resolve_base_path(relative_path):
+    """Resolve file path based on environment"""
+    if ENV == "PROD":
+        return f"gs://{BUCKET}/{SHARED_DATA_PATH}/{relative_path}"
+    else:
+        return f"/app/shared_data/{relative_path}"
 
 def resolve_latest_path(name, io="output", timestamp=None):
     base_dir = "data/raw/" if io == "input" else "data/processed/"
     if ENV == "PROD":
-        return gcs_path(f"processed/{name}")
+        return resolve_base_path(f"processed/{name}")
     elif timestamp:
         filename = name.replace(".csv", f"_{timestamp}.csv")
         return os.path.join(base_dir, filename)

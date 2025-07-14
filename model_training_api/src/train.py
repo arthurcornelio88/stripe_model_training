@@ -12,18 +12,38 @@ from urllib.parse import urljoin
 import json
 import shutil
 import argparse
+import time
+from google.cloud import storage
+from .mlflow_config import MLflowConfig
+from .storage_utils import StorageManager
+import datetime
 
 load_dotenv()
 
 ENV = os.getenv("ENV", "DEV")
 BUCKET = os.getenv("GCP_BUCKET")
-PREFIX = os.getenv("GCP_DATA_PREFIX")
-MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI").strip("/")
-EXPERIMENT = os.getenv("MLFLOW_EXPERIMENT")
+# Removed PREFIX - using SHARED_DATA_PATH directly
+GCS_BUCKET = os.getenv("GCS_BUCKET", "your-mlops-bucket")
+MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000").strip("/")
+EXPERIMENT = os.getenv("MLFLOW_EXPERIMENT", "fraud_detection_experiment")
 
+# Get environment-aware paths
+SHARED_DATA_PATH = os.getenv("SHARED_DATA_PATH", "/app/shared_data")
+MODEL_PATH = os.getenv("MODEL_PATH", "/app/models")
 
-def gcs_path(filename):
-    return f"gs://{BUCKET}/{PREFIX}/{filename}"
+# Initialiser les managers
+storage_manager = StorageManager()
+mlflow_config = MLflowConfig()
+
+def get_file_path(filename, io="input"):
+    """
+    Return environment-aware file path
+    """
+    if ENV == "PROD":
+        return os.path.join(SHARED_DATA_PATH, filename)
+    else:
+        base_dir = "data/raw/" if io == "input" else SHARED_DATA_PATH
+        return os.path.join(base_dir, filename)
 
 
 def get_latest_file(pattern):
@@ -42,13 +62,13 @@ def resolve_path(name, io="input", timestamp=None):
     Resolve the correct path depending on ENV and optional timestamp.
 
     - DEV: loads latest or specific timestamped CSV from local folder
-    - PROD: uses GCS fixed path
+    - PROD: uses environment-aware shared data path
     """
     if ENV == "PROD":
-        return gcs_path(f"processed/{name}")
+        return os.path.join(SHARED_DATA_PATH, name)
 
     # DEV
-    base_dir = "data/raw/" if io == "input" else "/app/shared_data/"
+    base_dir = "data/raw/" if io == "input" else SHARED_DATA_PATH
     if timestamp:
         filename = name.replace(".csv", f"_{timestamp}.csv")
         return os.path.join(base_dir, filename)
@@ -217,29 +237,80 @@ def log_mlflow(model, params, metrics, report):
         save_and_log_report(report, mlflow.active_run().info.run_id)
 
 
-def save_model(model, model_name="catboost_model.cbm"):
-    # 🔧 FIX: Sauvegarder dans shared_data pour éviter les problèmes de permissions
-    if ENV == "PROD":
-        output_path = gcs_path(f"models/{model_name}")
-    else:
-        # En DEV, sauvegarder dans shared_data qui est accessible en écriture
-        os.makedirs("/app/shared_data/models", exist_ok=True)
-        output_path = os.path.join("/app/shared_data/models", model_name)
+# def save_model(model, model_name="catboost_model.cbm"):
+#     # 🔧 FIX: Sauvegarder dans shared_data pour éviter les problèmes de permissions
+#     if ENV == "PROD":
+#         output_path = gcs_path(f"models/{model_name}")
+#     else:
+#         # En DEV, sauvegarder dans shared_data qui est accessible en écriture
+#         os.makedirs("/app/shared_data/models", exist_ok=True)
+#         output_path = os.path.join("/app/shared_data/models", model_name)
         
-    print(f"💾 Saving model to: {output_path}")
+#     print(f"💾 Saving model to: {output_path}")
     
-    try:
-        model.save_model(output_path)
-        print(f"✅ Model saved successfully to: {output_path}")
+#     try:
+#         model.save_model(output_path)
+#         print(f"✅ Model saved successfully to: {output_path}")
         
-        # 🔧 SUPPRIMÉ: Pas de copie vers models/ car problème de permissions  
-        # On garde seulement le modèle dans shared_data
+#         # 🔧 SUPPRIMÉ: Pas de copie vers models/ car problème de permissions  
+#         # On garde seulement le modèle dans shared_data
         
-        return output_path  # Retourner le chemin pour Discord
+#         return output_path  # Retourner le chemin pour Discord
                 
-    except Exception as e:
-        print(f"❌ Failed to save model: {e}")
-        raise
+#     except Exception as e:
+#         print(f"❌ Failed to save model: {e}")
+#         raise
+
+def save_model(model, model_name="catboost_model.cbm"):
+    """Sauvegarde le modèle selon l'environnement avec horodatage"""
+    from datetime import datetime
+    
+    # Horodater le nom du fichier
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    base_name = model_name.split('.')[0]  # "catboost_model"
+    extension = model_name.split('.')[-1]  # "cbm"
+    timestamped_name = f"{base_name}_{timestamp}.{extension}"  # "catboost_model_20250714_143025.cbm"
+    
+    if ENV == "PROD":
+        # Pour GCS, on sauvegarde d'abord localement puis on upload
+        temp_path = f"/tmp/{timestamped_name}"
+        model.save_model(temp_path)
+        
+        # Upload vers GCS
+        client = storage.Client()
+        bucket = client.bucket(GCS_BUCKET)
+        blob = bucket.blob(f"models/{timestamped_name}")
+        blob.upload_from_filename(temp_path)
+        
+        # Créer aussi un lien "latest" pour faciliter les prédictions
+        latest_blob = bucket.blob(f"models/{model_name}")  # Sans timestamp
+        latest_blob.upload_from_filename(temp_path)
+        
+        # Nettoyer le fichier temporaire
+        os.remove(temp_path)
+        output_path = f"gs://{GCS_BUCKET}/models/{timestamped_name}"
+        
+        print(f"✅ Model saved with timestamp: {output_path}")
+        print(f"✅ Latest model link: gs://{GCS_BUCKET}/models/{model_name}")
+        
+    else:
+        # Sauvegarde locale
+        os.makedirs("/app/shared_data/models", exist_ok=True)
+        timestamped_path = os.path.join("/app/shared_data/models", timestamped_name)
+        latest_path = os.path.join("/app/shared_data/models", model_name)
+        
+        # Sauvegarder avec timestamp
+        model.save_model(timestamped_path)
+        
+        # Créer une copie "latest" pour faciliter les prédictions
+        import shutil
+        shutil.copy2(timestamped_path, latest_path)
+        
+        output_path = timestamped_path
+        print(f"✅ Model saved with timestamp: {timestamped_path}")
+        print(f"✅ Latest model link: {latest_path}")
+        
+    return output_path
 
 def run_training(
     timestamp: str = None,
@@ -439,6 +510,10 @@ def run_fine_tuning(
     - Charger les données déjà preprocessées
     - Faire le fine-tuning
     """
+
+    """Fine-tuning avec MLflow tracking"""
+    start_time = time.time()
+
     print(f"🧠 Starting fine-tuning for model: {model_name}")
     print(f"🔍 Using preprocessed data with timestamp: {timestamp}")
     print(f"💾 Expected files will be: X_train_{timestamp}.csv, X_test_{timestamp}.csv, etc.")
@@ -513,7 +588,7 @@ def run_fine_tuning(
     
     # Chemin du modèle existant
     if ENV == "PROD":
-        existing_model_path = gcs_path(f"models/{model_name}")
+        existing_model_path = resolve_path(f"models/{model_name}")
     else:
         # 🔧 Chercher d'abord dans shared_data (où sont sauvegardés les nouveaux modèles)
         shared_model_path = os.path.join("/app/shared_data", model_name)
@@ -541,6 +616,19 @@ def run_fine_tuning(
     # print(f"🔍 DEBUG: Model expects features: {model_features}")
     # print(f"🔍 DEBUG: Data has features: {list(X_train_sample.columns)}")
     
+    with mlflow.start_run():
+        # Parameters à logger
+        params = {
+            "learning_rate": learning_rate,
+            "epochs": epochs,
+            "model_name": model_name,
+            "timestamp": timestamp or "latest",
+            "training_samples": len(X_train_sample),
+            "fraud_ratio": float(y_train_sample.mean()),
+            "environment": ENV
+        }
+        mlflow.log_params(params)
+    
     # Fine-tuning
     model = fine_tune_model(
         existing_model_path=existing_model_path,
@@ -562,8 +650,19 @@ def run_fine_tuning(
         "roc_auc": auc,
         "precision": report["1"]["precision"],
         "recall": report["1"]["recall"],
-        "f1": report["1"]["f1-score"]
+        "f1": report["1"]["f1-score"],
+        "training_time": time.time() - start_time
     }
+
+    # Log model dans MLflow
+    mlflow.catboost.log_model(
+        model,
+        "model",
+        registered_model_name="fraud-detection-model"
+    )
+
+    run_id = mlflow.active_run().info.run_id
+    print(f"📊 MLflow Run ID: {run_id}")
     
     print(f"✅ Fine-tuning complete!")
     print(f"🔍 DEBUG: model_path in response: {model_path}")
@@ -573,7 +672,9 @@ def run_fine_tuning(
         "auc": auc,
         "metrics": metrics,
         "model_updated": True,
-        "model_path": model_path  # 🔧 Ajouter le chemin du modèle
+        "model_path": model_path,
+        "mlflow_run_id": run_id,
+        "model_timestamp": datetime.now().strftime("%Y%m%d_%H%M%S")
     }
 
 def main():

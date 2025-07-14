@@ -12,11 +12,15 @@ load_dotenv()
 
 ENV = os.getenv("ENV", "DEV")
 BUCKET = os.getenv("GCP_BUCKET")
-PREFIX = os.getenv("GCP_DATA_PREFIX")
+SHARED_DATA_PATH = os.getenv("SHARED_DATA_PATH")
 
 
-def gcs_path(filename):
-    return f"gs://{BUCKET}/{PREFIX}/{filename}"
+def resolve_base_path(relative_path):
+    """Resolve file path based on environment"""
+    if ENV == "PROD":
+        return f"gs://{BUCKET}/{SHARED_DATA_PATH}/{relative_path}"
+    else:
+        return f"/app/shared_data/{relative_path}"
 
 
 def resolve_path(filename, io="input"):
@@ -24,10 +28,10 @@ def resolve_path(filename, io="input"):
     Resolves the correct path based on ENV.
 
     DEV: local path (data/raw or data/processed)
-    PROD: GCS path using GCP_BUCKET and GCP_DATA_PREFIX
+    PROD: GCS path using GCP_BUCKET and SHARED_DATA_PATH
     """
     sub = "raw/" if io == "input" else "processed/"
-    return gcs_path(f"{sub}{filename}") if ENV == "PROD" else os.path.join(f"data/{sub}", filename)
+    return resolve_base_path(f"{sub}{filename}") if ENV == "PROD" else os.path.join(f"data/{sub}", filename)
 
 
 def haversine_distance(lat1, lon1, lat2, lon2):

@@ -52,15 +52,17 @@ class PreprocessDirectRequest(BaseModel):
 
 @app.post("/preprocess_direct")
 def preprocess_direct(request: PreprocessDirectRequest):
-    tmp_dir = "/app/shared_data/tmp"
+    # Use environment-aware paths
+    shared_data_path = os.getenv("SHARED_DATA_PATH", "/app/shared_data")
+    tmp_dir = os.path.join(shared_data_path, "tmp")
     os.makedirs(tmp_dir, exist_ok=True)
 
     tmp_input = os.path.join(tmp_dir, f"raw_input_{uuid4().hex}.csv")
     df = pd.DataFrame(request.data).reset_index(drop=True)
     df.to_csv(tmp_input, index=False)
 
-    # 🔥 FORCE shared_data
-    output_dir = "/app/shared_data"
+    # Use environment-aware output directory
+    output_dir = shared_data_path
 
     timestamp = run_preprocessing(
         input_path=tmp_input,
@@ -245,9 +247,10 @@ def monitor_drift(request: DriftRequest):
     report = Report(metrics=[preset])
     report.run(reference_data=ref, current_data=curr)
 
-    # Définir le nom du rapport HTML
+    # Définir le nom du rapport HTML  
     output_html_rel = request.output_html
-    abs_path_html = os.path.join("/app/shared_data", output_html_rel)
+    shared_data_path = os.getenv("SHARED_DATA_PATH", "/app/shared_data")
+    abs_path_html = os.path.join(shared_data_path, output_html_rel)
 
     # Sauvegarde HTML
     os.makedirs(os.path.dirname(abs_path_html), exist_ok=True)

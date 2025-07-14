@@ -11,10 +11,21 @@ load_dotenv()
 
 ENV = os.getenv("ENV", "DEV")
 BUCKET = os.getenv("GCP_BUCKET")
-PREFIX = os.getenv("GCP_DATA_PREFIX")
+SHARED_DATA_PATH = os.getenv("SHARED_DATA_PATH")
 
-def gcs_path(filename):
-    return f"gs://{BUCKET}/{PREFIX}/models/{filename}"
+def resolve_path(relative_path):
+    """Resolve file path based on environment"""
+    if ENV == "PROD":
+        return f"gs://{BUCKET}/{SHARED_DATA_PATH}/{relative_path}"
+    else:
+        return f"/app/shared_data/{relative_path}"
+
+def get_file_path(filename, subfolder=""):
+    """Get file path with optional subfolder"""
+    if subfolder:
+        return resolve_path(f"{subfolder}/{filename}")
+    else:
+        return resolve_path(filename)
 
 def load_model(model_path):
     model = CatBoostClassifier()
@@ -38,7 +49,7 @@ def run_inference(model, df):
 
 def run_prediction(input_path: str, model_name: str, output_path: str):
     # Déduire le bon chemin du modèle
-    model_path = gcs_path(model_name) if ENV == "PROD" else os.path.join("models", model_name)
+    model_path = get_file_path(model_name, "models") if ENV == "PROD" else os.path.join("models", model_name)
     model = load_model(model_path)
 
     # Charger les données d'entrée (via read_csv_flexible dans main.py)
