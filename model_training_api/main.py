@@ -1,3 +1,4 @@
+from urllib3 import request
 from fastapi import FastAPI
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List, Dict
@@ -55,7 +56,7 @@ def preprocess_direct(request: PreprocessDirectRequest):
     os.makedirs(tmp_dir, exist_ok=True)
 
     tmp_input = os.path.join(tmp_dir, f"raw_input_{uuid4().hex}.csv")
-    df = pd.DataFrame(request.data)
+    df = pd.DataFrame(request.data).reset_index(drop=True)
     df.to_csv(tmp_input, index=False)
 
     # 🔥 FORCE shared_data
@@ -108,18 +109,37 @@ def train_endpoint(request: TrainRequest):
                 epochs=request.epochs
             )
             
-            return {
+            print(f"🔍 DEBUG: run_fine_tuning returned: {result}")  # 🔧 Debug log
+            print(f"🔍 DEBUG: result keys: {list(result.keys())}")  # 🔧 Debug log
+            print(f"🔍 DEBUG: model_path value: {result.get('model_path', 'NOT_FOUND')}")  # 🔧 Debug log
+            
+            # 🚨 VALIDATION: Vérifier que model_path existe
+            if "model_path" not in result:
+                print("❌ ERROR: model_path not found in result!")
+                raise KeyError("model_path not found in fine-tuning result")
+            
+            if result["model_path"] is None:
+                print("❌ ERROR: model_path is None!")
+                raise ValueError("model_path is None in fine-tuning result")
+            
+            response_data = {
                 "status": "fine_tuning_complete",
                 "mode": "fine_tune",
                 "model_updated": result["model_updated"],
                 "auc": result["auc"],
                 "auc_improvement": result["auc"] - 0.74,  # Estimation basée sur l'AUC précédent
                 "metrics": result["metrics"],
+                "model_path": result["model_path"],  # 🔧 Add model path to response
                 "parameters": {
                     "learning_rate": request.learning_rate,
                     "epochs": request.epochs
                 }
             }
+            
+            print(f"🔍 DEBUG: API response will be: {response_data}")  # 🔧 Debug log
+            print(f"🔍 DEBUG: model_path in response: {response_data.get('model_path', 'MISSING')}")  # 🔧 Debug log
+            
+            return response_data
             
         except Exception as e:
             return {"status": "error", "message": f"Fine-tuning failed: {str(e)}"}

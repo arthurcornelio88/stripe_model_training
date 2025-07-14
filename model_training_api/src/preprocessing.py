@@ -106,6 +106,11 @@ def encode_and_split(df: pd.DataFrame, output_dir: str, test_size=0.2, random_st
     if ENV == "DEV":
         os.makedirs(output_dir, exist_ok=True)
 
+    # 🐛 DEBUG: Vérifier les colonnes avant sauvegarde
+    print(f"🔍 DEBUG X_train columns before save: {list(X_train.columns)}")
+    print(f"🔍 DEBUG X_train shape: {X_train.shape}")
+    print(f"🔍 DEBUG X_train index: {X_train.index.name}")
+    
     # Save files
     for name, data in {
         "X_train": X_train,
@@ -113,7 +118,9 @@ def encode_and_split(df: pd.DataFrame, output_dir: str, test_size=0.2, random_st
         "y_train": y_train,
         "y_test": y_test
     }.items():
+        data = data.reset_index(drop=True)
         filename = os.path.join(output_dir, f"{name}_{timestamp}.csv")
+        print(f"🔍 DEBUG Saving {name} with columns: {list(data.columns) if hasattr(data, 'columns') else 'Series'}")
         data.to_csv(filename, index=False)
 
     print(f"✅ Data saved to {output_dir}")

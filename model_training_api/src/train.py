@@ -2,18 +2,18 @@ import pandas as pd
 import mlflow
 from catboost import CatBoostClassifier
 from sklearn.metrics import classification_report, roc_auc_score
+from sklearn.model_selection import train_test_split
 from dotenv import load_dotenv
 import os
-import argparse
-from glob import glob
+import glob
 from mlflow.tracking import MlflowClient
 import requests
 from urllib.parse import urljoin
 import json
 import shutil
+import argparse
 
-
-
+load_dotenv()
 
 ENV = os.getenv("ENV", "DEV")
 BUCKET = os.getenv("GCP_BUCKET")
@@ -69,7 +69,24 @@ def load_data(timestamp=None, test_mode=False, sample_size=5000):
     def read(name):
         path = resolve_path(name, io="output", timestamp=timestamp)
         print(f"🔄 Resolving latest path for {name}: {path}")
-        return pd.read_csv(path)
+        df = pd.read_csv(path)
+        
+        # print(f"🔍 DEBUG {name} loaded with columns: {list(df.columns)}")
+        # print(f"🔍 DEBUG {name} shape: {df.shape}")
+        
+        # 🧹 Nettoyer les colonnes d'index potentielles
+        if "Unnamed: 0" in df.columns:
+            print(f"🧹 Removing index column 'Unnamed: 0' from {name}")
+            df = df.drop(columns=["Unnamed: 0"])
+        
+        # Nettoyer autres colonnes d'index
+        index_cols = [col for col in df.columns if col.startswith("Unnamed:")]
+        if index_cols:
+            print(f"🧹 Removing index columns {index_cols} from {name}")
+            df = df.drop(columns=index_cols)
+        
+        # print(f"🔍 DEBUG {name} final columns: {list(df.columns)}")
+        return df
 
     X_train = read("X_train.csv")
     X_test = read("X_test.csv")
@@ -200,16 +217,29 @@ def log_mlflow(model, params, metrics, report):
         save_and_log_report(report, mlflow.active_run().info.run_id)
 
 
-
 def save_model(model, model_name="catboost_model.cbm"):
-    output_path = (
-        gcs_path(f"models/{model_name}") if ENV == "PROD"
-        else os.path.join("models", model_name)
-    )
-    if ENV == "DEV":
-        os.makedirs("models", exist_ok=True)
-    model.save_model(output_path)
-    print(f"💾 Model saved to: {output_path}")
+    # 🔧 FIX: Sauvegarder dans shared_data pour éviter les problèmes de permissions
+    if ENV == "PROD":
+        output_path = gcs_path(f"models/{model_name}")
+    else:
+        # En DEV, sauvegarder dans shared_data qui est accessible en écriture
+        os.makedirs("/app/shared_data/models", exist_ok=True)
+        output_path = os.path.join("/app/shared_data/models", model_name)
+        
+    print(f"💾 Saving model to: {output_path}")
+    
+    try:
+        model.save_model(output_path)
+        print(f"✅ Model saved successfully to: {output_path}")
+        
+        # 🔧 SUPPRIMÉ: Pas de copie vers models/ car problème de permissions  
+        # On garde seulement le modèle dans shared_data
+        
+        return output_path  # Retourner le chemin pour Discord
+                
+    except Exception as e:
+        print(f"❌ Failed to save model: {e}")
+        raise
 
 def run_training(
     timestamp: str = None,
@@ -288,37 +318,106 @@ def fine_tune_model(existing_model_path, X_train, y_train, X_val, y_val, learnin
     print(f"🧠 Fine-tuning existing model: {existing_model_path}")
     
     # Charger le modèle existant
-    model = CatBoostClassifier()
-    model.load_model(existing_model_path)
+    existing_model = CatBoostClassifier()
+    existing_model.load_model(existing_model_path)
+    
+    # 🔍 DEBUG: Comparer les features
+    model_features = existing_model.feature_names_
+    data_features = list(X_train.columns)
+    
+    # print(f"🔍 Model expects features: {model_features}")
+    # print(f"🔍 Data provides features: {data_features}")
+    
+    # 🧹 ALIGNER LES COLONNES avec le modèle original
+    if model_features != data_features:
+        print("🔧 Aligning column order with existing model...")
+        
+        # Vérifier que toutes les features du modèle sont présentes
+        missing_features = [f for f in model_features if f not in data_features]
+        extra_features = [f for f in data_features if f not in model_features]
+        
+        if missing_features:
+            # 🔧 FIX: Créer les colonnes manquantes si c'est 'Unnamed: 0' (colonne d'index)
+            for missing_col in missing_features:
+                if missing_col.startswith('Unnamed:'):
+                    print(f"🔧 Creating missing index column: {missing_col}")
+                    X_train[missing_col] = range(len(X_train))  # Créer un index factice
+                    X_val[missing_col] = range(len(X_val))
+                else:
+                    raise ValueError(f"❌ Missing required feature: {missing_col}")
+        
+        if extra_features:
+            print(f"⚠️ Extra features in data (will be ignored): {extra_features}")
+        
+        # Réorganiser les colonnes dans l'ordre attendu par le modèle
+        X_train = X_train[model_features]
+        X_val = X_val[model_features]
+        
+        print(f"✅ Columns aligned. New order: {list(X_train.columns)}")
     
     print(f"✅ Model loaded. Starting fine-tuning with lr={learning_rate}, epochs={epochs}")
     
-    # 🔧 IMPORTANT: Pour le fine-tuning, on ne peut pas passer 'iterations' à fit()
-    # Il faut créer un nouveau modèle avec les bons paramètres
+    # 🔧 Créer un nouveau modèle pour le fine-tuning avec des paramètres adaptés
     fine_tuned_model = CatBoostClassifier(
         iterations=epochs,
         learning_rate=learning_rate,
-        verbose=10,
-        early_stopping_rounds=5,
+        verbose=5,  # Moins verbeux
+        early_stopping_rounds=max(2, epochs//3),  # Plus de patience pour éviter l'overfitting prématuré
         use_best_model=True,
-        # Garder les mêmes paramètres que le modèle original
-        depth=6,
+        # Garder les mêmes paramètres que le modèle original mais plus conservateurs
+        depth=4,  # Réduire la profondeur pour éviter l'overfitting
         loss_function="Logloss",
         eval_metric="AUC",
         random_seed=42,
-        class_weights=[1, 25],
+        class_weights=[1, 15],  # Réduire le poids des fraudes pour éviter l'overfitting
         # 🔧 FIX: Désactiver les logs CatBoost pour éviter les problèmes de permissions
-        train_dir=None,  # Pas de répertoire de travail
-        allow_writing_files=False  # Pas d'écriture de fichiers
+        train_dir=None,
+        allow_writing_files=False,
+        # 🔧 Paramètres pour réduire l'overfitting
+        l2_leaf_reg=10,  # Régularisation L2
+        bootstrap_type='Bayesian',  # Régularisation par bootstrap
+        bagging_temperature=1.0
+        # 🔧 FIX: Enlever od_type et od_wait car conflictuel avec early_stopping_rounds
     )
     
     # Fine-tuning = entraîner avec init_model
-    fine_tuned_model.fit(
-        X_train,
-        y_train,
-        eval_set=(X_val, y_val),
-        init_model=model  # 🔥 Utiliser le modèle existant comme point de départ
-    )
+    try:
+        fine_tuned_model.fit(
+            X_train,
+            y_train,
+            eval_set=(X_val, y_val),
+            init_model=existing_model  # 🔥 Utiliser le modèle existant comme point de départ
+        )
+    except Exception as e:
+        print(f"⚠️ Fine-tuning with init_model failed: {e}")
+        print("🔄 Trying alternative approach without init_model...")
+        
+        # Fallback: entraîner un nouveau modèle avec plus d'itérations
+        fallback_model = CatBoostClassifier(
+            iterations=epochs * 3,  # Plus d'itérations
+            learning_rate=learning_rate * 0.5,  # Learning rate plus faible
+            verbose=5,
+            early_stopping_rounds=epochs,
+            use_best_model=True,
+            depth=4,
+            loss_function="Logloss",
+            eval_metric="AUC",
+            random_seed=42,
+            class_weights=[1, 15],
+            train_dir=None,
+            allow_writing_files=False,
+            l2_leaf_reg=10,
+            bootstrap_type='Bayesian',
+            bagging_temperature=1.0
+        )
+        
+        fallback_model.fit(
+            X_train,
+            y_train,
+            eval_set=(X_val, y_val)
+        )
+        
+        fine_tuned_model = fallback_model
     
     print("✅ Fine-tuning complete!")
     return fine_tuned_model
@@ -342,6 +441,7 @@ def run_fine_tuning(
     """
     print(f"🧠 Starting fine-tuning for model: {model_name}")
     print(f"🔍 Using preprocessed data with timestamp: {timestamp}")
+    print(f"💾 Expected files will be: X_train_{timestamp}.csv, X_test_{timestamp}.csv, etc.")
     
     # Charger les données préprocessées (déjà préparées par le DAG)
     X_train, X_test, y_train, y_test = load_data(timestamp=timestamp, test_mode=False)
@@ -349,21 +449,97 @@ def run_fine_tuning(
     print(f"� Loaded preprocessed data: X_train {X_train.shape}, X_test {X_test.shape}")
     print(f"🔍 Columns: {list(X_train.columns[:5])}..." if len(X_train.columns) > 5 else f"🔍 Columns: {list(X_train.columns)}")
     
-    # Prendre seulement une partie des données pour fine-tuning (ex: 20%)
-    sample_size = min(len(X_train) // 5, 2000)  # Maximum 2000 samples
-    X_train_sample = X_train.sample(n=sample_size, random_state=42)
-    y_train_sample = y_train.loc[X_train_sample.index]
+    # Vérifier la distribution des classes dans les données d'entraînement
+    fraud_count = y_train.sum()
+    total_count = len(y_train)
+    fraud_ratio = fraud_count / total_count
     
-    print(f"📊 Using {len(X_train_sample)} samples for fine-tuning")
+    print(f"📊 Training data distribution:")
+    print(f"    Total samples: {total_count}")
+    print(f"    Fraud samples: {fraud_count}")
+    print(f"    Fraud ratio: {fraud_ratio:.4f}")
+    
+    # Vérifier si on a assez de données pour fine-tuning
+    if fraud_count < 2:
+        raise ValueError(f"❌ Insufficient fraud samples for fine-tuning: {fraud_count}. Need at least 2.")
+    
+    # Échantillonnage stratifié pour préserver les classes
+    
+    # Prendre au maximum 2000 échantillons, mais garder au moins 5 fraudes si possible
+    max_samples = min(2000, len(X_train))
+    min_fraud_samples = min(5, fraud_count)  # Garder au moins 5 fraudes ou tout ce qu'on a
+    
+    if fraud_count <= min_fraud_samples:
+        # Si on a très peu de fraudes, on les prend toutes
+        fraud_indices = y_train[y_train == 1].index
+        non_fraud_indices = y_train[y_train == 0].index
+        
+        # Prendre toutes les fraudes + échantillon de non-fraudes
+        remaining_samples = max_samples - len(fraud_indices)
+        if remaining_samples > 0 and len(non_fraud_indices) > 0:
+            selected_non_fraud = non_fraud_indices.to_series().sample(n=min(remaining_samples, len(non_fraud_indices)), random_state=42)
+            selected_indices = fraud_indices.union(selected_non_fraud)
+        else:
+            selected_indices = fraud_indices
+    else:
+        # Échantillonnage stratifié normal
+        X_train_sample, _, y_train_sample, _ = train_test_split(
+            X_train, y_train,
+            train_size=max_samples,
+            stratify=y_train,
+            random_state=42
+        )
+        selected_indices = X_train_sample.index
+    
+    X_train_sample = X_train.loc[selected_indices]
+    y_train_sample = y_train.loc[selected_indices]
+    
+    final_fraud_count = y_train_sample.sum()
+    final_total = len(y_train_sample)
+    final_fraud_ratio = final_fraud_count / final_total
+    
+    print(f"📊 Fine-tuning sample:")
+    print(f"    Total samples: {final_total}")
+    print(f"    Fraud samples: {final_fraud_count}")
+    print(f"    Fraud ratio: {final_fraud_ratio:.4f}")
+    
+    if final_fraud_count < 1:
+        raise ValueError(f"❌ No fraud samples in fine-tuning data after sampling!")
+    
+    # 🔍 DEBUG: Vérifier les colonnes avant fine-tuning
+    # print(f"🔍 DEBUG X_train_sample columns before fine-tuning: {list(X_train_sample.columns)}")
+    # print(f"🔍 DEBUG X_test columns before fine-tuning: {list(X_test.columns)}")
+    # print(f"🔍 DEBUG X_train_sample dtypes: {X_train_sample.dtypes.to_dict()}")
     
     # Chemin du modèle existant
     if ENV == "PROD":
         existing_model_path = gcs_path(f"models/{model_name}")
     else:
-        existing_model_path = os.path.join("models", model_name)
+        # 🔧 Chercher d'abord dans shared_data (où sont sauvegardés les nouveaux modèles)
+        shared_model_path = os.path.join("/app/shared_data", model_name)
+        models_model_path = os.path.join("models", model_name)
+        
+        if os.path.exists(shared_model_path):
+            existing_model_path = shared_model_path
+            print(f"🔍 Using model from shared_data: {existing_model_path}")
+        elif os.path.exists(models_model_path):
+            existing_model_path = models_model_path
+            print(f"🔍 Using model from models/: {existing_model_path}")
+        else:
+            raise FileNotFoundError(f"❌ Model not found in either {shared_model_path} or {models_model_path}")
     
     if not os.path.exists(existing_model_path):
         raise FileNotFoundError(f"❌ Model not found: {existing_model_path}")
+    
+    print(f"✅ Found existing model at: {existing_model_path}")
+    
+    # 🔍 DEBUG: Charger le modèle pour voir ses features
+    # print(f"🔍 DEBUG: Checking existing model features...")
+    temp_model = CatBoostClassifier()
+    temp_model.load_model(existing_model_path)
+    model_features = temp_model.feature_names_
+    # print(f"🔍 DEBUG: Model expects features: {model_features}")
+    # print(f"🔍 DEBUG: Data has features: {list(X_train_sample.columns)}")
     
     # Fine-tuning
     model = fine_tune_model(
@@ -380,7 +556,7 @@ def run_fine_tuning(
     report, auc = evaluate_model(model, X_test, y_test)
     
     # Sauvegarde du modèle fine-tuné
-    save_model(model, model_name=model_name)
+    model_path = save_model(model, model_name=model_name)
     
     metrics = {
         "roc_auc": auc,
@@ -390,12 +566,14 @@ def run_fine_tuning(
     }
     
     print(f"✅ Fine-tuning complete!")
+    print(f"🔍 DEBUG: model_path in response: {model_path}")
     print(f"📊 New AUC: {auc:.4f} | F1: {metrics['f1']:.4f}")
     
     return {
         "auc": auc,
         "metrics": metrics,
-        "model_updated": True
+        "model_updated": True,
+        "model_path": model_path  # 🔧 Ajouter le chemin du modèle
     }
 
 def main():
