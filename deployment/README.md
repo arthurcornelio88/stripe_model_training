@@ -193,3 +193,27 @@ After successful deployment:
 - **Status**: `gcloud run services list --region=europe-west1`
 - **Configuration**: Check `entrypoint.sh` and `secret_manager.py`
 - **Documentation**: See `../../gcp_commands.md` for complete setup guide
+
+## 📚 Documentation
+
+### API Usage Guides
+- **[📘 Complete API Production Guide](../docs/api-production-guide.md)** - Comprehensive guide with local and production examples
+- **[📘 Model API Endpoints](../docs/model-api_endpoints.md)** - Updated endpoint documentation with production URLs
+- **[📊 MLflow Integration](../docs/)** - MLflow tracking and experiment management
+
+### Quick Reference
+- **Training API**: https://mlops-training-api-bxzifydblq-ew.a.run.app
+- **MLflow UI**: https://mlops-mlflow-bxzifydblq-ew.a.run.app
+- **Mock API**: https://mlops-mock-api-bxzifydblq-ew.a.run.app
+
+### API Testing
+```bash
+# Test production API health
+curl https://mlops-training-api-bxzifydblq-ew.a.run.app/health
+
+# Test training endpoint
+curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/train \
+  -H "Content-Type: application/json" \
+  -d '{"timestamp": "20250715_195232", "learning_rate": 0.1, "epochs": 10}' \
+  --max-time 600
+```

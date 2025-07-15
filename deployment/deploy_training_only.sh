@@ -43,7 +43,7 @@ gcloud run deploy mlops-training-api \
   --timeout 3600 \
   --concurrency 10 \
   --max-instances 3 \
-  --set-env-vars ENV=PROD,SERVICE_TYPE=training,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCS_BUCKET=$BUCKET_NAME,MLFLOW_TRACKING_URI=$MLFLOW_URI \
+  --set-env-vars ENV=PROD,SERVICE_TYPE=training,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCS_BUCKET=$BUCKET_NAME,MLFLOW_TRACKING_URI=$MLFLOW_URI,DEBUG_ENV=true \
   --service-account mlops-service-account@${PROJECT_ID}.iam.gserviceaccount.com
 
 # Get the new URL

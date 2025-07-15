@@ -1,28 +1,18 @@
 #!/bin/bash
-# deployment/entrypoint_fixed.sh
+# deployment/entrypoint.sh
 
 echo "🚀 Starting MLOps API in $ENV mode..."
 
 # Configuration centralisée des variables d'environnement
-echo "🔧 Setting up environment configuration..."
-
-# Export des variables d'environnement dans un fichier temporaire
+echo "� Setting up environment configuration..."
 python3 -c "
 import sys
-import os
 sys.path.append('/app')
 sys.path.append('/app/deployment')
 from deployment.env_config import setup_environment, TRAINING_API_REQUIRED_VARS, MOCK_API_REQUIRED_VARS, MLFLOW_SERVER_REQUIRED_VARS
 
 # Configuration centralisée
 config = setup_environment()
-
-# Écrire les variables d'environnement dans un fichier
-with open('/tmp/env_vars.sh', 'w') as f:
-    for key, value in os.environ.items():
-        # Exporter seulement les variables MLOps importantes
-        if any(keyword in key.upper() for keyword in ['MLFLOW', 'GCS', 'BUCKET', 'SHARED_DATA', 'MODEL_PATH', 'EXPERIMENT', 'BQ_', 'DISCORD']):
-            f.write(f'export {key}=\"{value}\"\n')
 
 # Validation selon le service
 service_type = '$SERVICE_TYPE'
@@ -33,21 +23,6 @@ elif service_type == 'mock':
 elif service_type == 'mlflow':
     config.validate_required_vars(MLFLOW_SERVER_REQUIRED_VARS)
 "
-
-# Sourcer les variables d'environnement
-if [ -f /tmp/env_vars.sh ]; then
-    source /tmp/env_vars.sh
-    echo "✅ Environment variables exported to shell"
-    
-    # Debug: afficher les variables importantes
-    echo "🔍 Key environment variables:"
-    echo "  MLFLOW_TRACKING_URI: $MLFLOW_TRACKING_URI"
-    echo "  MLFLOW_EXPERIMENT: $MLFLOW_EXPERIMENT"
-    echo "  GCS_BUCKET: $GCS_BUCKET"
-    
-else
-    echo "⚠️ Environment variables file not found"
-fi
 
 echo "✅ Environment configuration complete"
 
