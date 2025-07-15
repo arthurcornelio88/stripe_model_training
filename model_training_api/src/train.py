@@ -66,9 +66,15 @@ def resolve_path(name, io="input", timestamp=None):
     """
     if ENV == "PROD":
         if io == "output":
-            return os.path.join(SHARED_DATA_PATH, "preprocessed", name)
+            base_path = os.path.join(SHARED_DATA_PATH, "preprocessed")
         else:
-            return os.path.join(SHARED_DATA_PATH, name)
+            base_path = SHARED_DATA_PATH
+        
+        if timestamp:
+            filename = name.replace(".csv", f"_{timestamp}.csv")
+            return os.path.join(base_path, filename)
+        else:
+            return os.path.join(base_path, name)
 
     # DEV
     base_dir = "data/raw/" if io == "input" else os.path.join(SHARED_DATA_PATH, "preprocessed")
@@ -238,31 +244,6 @@ def log_mlflow(model, params, metrics, report):
         )
 
         save_and_log_report(report, mlflow.active_run().info.run_id)
-
-
-# def save_model(model, model_name="catboost_model.cbm"):
-#     # 🔧 FIX: Sauvegarder dans shared_data pour éviter les problèmes de permissions
-#     if ENV == "PROD":
-#         output_path = gcs_path(f"models/{model_name}")
-#     else:
-#         # En DEV, sauvegarder dans shared_data qui est accessible en écriture
-#         os.makedirs("/app/shared_data/models", exist_ok=True)
-#         output_path = os.path.join("/app/shared_data/models", model_name)
-        
-#     print(f"💾 Saving model to: {output_path}")
-    
-#     try:
-#         model.save_model(output_path)
-#         print(f"✅ Model saved successfully to: {output_path}")
-        
-#         # 🔧 SUPPRIMÉ: Pas de copie vers models/ car problème de permissions  
-#         # On garde seulement le modèle dans shared_data
-        
-#         return output_path  # Retourner le chemin pour Discord
-                
-#     except Exception as e:
-#         print(f"❌ Failed to save model: {e}")
-#         raise
 
 def save_model(model, model_name="catboost_model.cbm"):
     """Sauvegarde le modèle selon l'environnement avec horodatage"""
