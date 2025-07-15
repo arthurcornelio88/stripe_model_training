@@ -23,6 +23,7 @@ if [ "$ENV" = "PROD" ]; then
     export MODEL_PATH="gs://${GCS_BUCKET}/models"
     
     # Configuration MLflow pour la production (secrets already loaded)
+    export MLFLOW_TRACKING_URI="sqlite:///mlflow.db"  # Simple tracking URI for production
     export MLFLOW_ARTIFACT_URI="gs://${GCS_BUCKET}/mlflow-artifacts"
     export MLFLOW_BACKEND_STORE_URI="sqlite:///mlflow.db"  # Simple backend for production
     # MLFLOW_EXPERIMENT is already loaded from secrets
@@ -48,7 +49,7 @@ fi
 if [ "$SERVICE_TYPE" = "mock" ]; then
     echo "🔄 Starting Mock Realtime API..."
     cd /app/mock_realtime_api
-    python main.py
+    uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 elif [ "$SERVICE_TYPE" = "mlflow" ]; then
     echo "📊 Starting MLflow Tracking Server..."
     mlflow server \
@@ -59,5 +60,5 @@ elif [ "$SERVICE_TYPE" = "mlflow" ]; then
 else
     echo "🧠 Starting Model Training API..."
     cd /app/model_training_api
-    python main.py
+    uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 fi
