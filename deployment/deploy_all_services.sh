@@ -65,6 +65,7 @@ gcloud run deploy mlops-training-api \
   --allow-unauthenticated \
   --set-env-vars ENV=PROD,SERVICE_TYPE=training \
   --set-env-vars GOOGLE_CLOUD_PROJECT=${PROJECT_ID} \
+  --set-env-vars MLFLOW_TRACKING_URI=${MLFLOW_URI} \
   --memory 2Gi \
   --cpu 2 \
   --port 8000 \

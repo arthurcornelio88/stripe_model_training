@@ -20,16 +20,67 @@ import datetime
 
 load_dotenv()
 
-ENV = os.getenv("ENV", "DEV")
-BUCKET = os.getenv("GCP_BUCKET")
-# Removed PREFIX - using SHARED_DATA_PATH directly
-GCS_BUCKET = os.getenv("GCS_BUCKET", "your-mlops-bucket")
-MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000").strip("/")
-EXPERIMENT = os.getenv("MLFLOW_EXPERIMENT", "fraud_detection_experiment")
+class EnvironmentVariables:
+    """Gestionnaire centralisé des variables d'environnement pour train.py"""
+    
+    def __init__(self):
+        self.env = os.getenv("ENV", "DEV")
+        self._validate_and_load_vars()
+        
+    def _validate_and_load_vars(self):
+        """Valide et charge les variables d'environnement"""
+        print(f"🔧 Loading environment variables for {self.env} mode...")
+        
+        # Variables de base
+        self.env_mode = self.env
+        
+        # Bucket configuration (avec fallback)
+        self.gcs_bucket = os.getenv("GCS_BUCKET") or os.getenv("GCP_BUCKET", "fraud-detection-jedha2024")
+        
+        # Configuration MLflow
+        self.mlflow_tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+        self.mlflow_experiment = os.getenv("MLFLOW_EXPERIMENT", "fraud_detection_experiment")
+        
+        # Chemins de données
+        self.shared_data_path = os.getenv("SHARED_DATA_PATH", "/app/shared_data")
+        self.model_path = os.getenv("MODEL_PATH", "/app/models")
+        
+        # Nettoyage des valeurs
+        self.mlflow_tracking_uri = self.mlflow_tracking_uri.strip().rstrip("/")
+        self.gcs_bucket = self.gcs_bucket.strip()
+        
+        # Debug des variables chargées
+        self._debug_variables()
+        
+    def _debug_variables(self):
+        """Affiche les variables pour debug"""
+        print(f"🔍 Environment variables loaded:")
+        print(f"  ENV: {self.env_mode}")
+        print(f"  GCS_BUCKET: {self.gcs_bucket}")
+        print(f"  MLFLOW_TRACKING_URI: {self.mlflow_tracking_uri}")
+        print(f"  MLFLOW_EXPERIMENT: {self.mlflow_experiment}")
+        print(f"  SHARED_DATA_PATH: {self.shared_data_path}")
+        print(f"  MODEL_PATH: {self.model_path}")
+        
+    def get_mlflow_uri(self) -> str:
+        """Retourne l'URI MLflow configuré"""
+        return self.mlflow_tracking_uri
+        
+    def get_bucket_name(self) -> str:
+        """Retourne le nom du bucket GCS"""
+        return self.gcs_bucket
 
-# Get environment-aware paths
-SHARED_DATA_PATH = os.getenv("SHARED_DATA_PATH", "/app/shared_data")
-MODEL_PATH = os.getenv("MODEL_PATH", "/app/models")
+# Initialisation des variables d'environnement
+env_vars = EnvironmentVariables()
+
+# Variables globales pour compatibilité (DEPRECATED - utiliser env_vars)
+ENV = env_vars.env_mode
+BUCKET = env_vars.gcs_bucket  # Alias pour GCP_BUCKET
+GCS_BUCKET = env_vars.gcs_bucket
+MLFLOW_URI = env_vars.mlflow_tracking_uri
+EXPERIMENT = env_vars.mlflow_experiment
+SHARED_DATA_PATH = env_vars.shared_data_path
+MODEL_PATH = env_vars.model_path
 
 # Initialiser les managers
 storage_manager = StorageManager()

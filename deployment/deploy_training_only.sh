@@ -18,11 +18,14 @@ echo "🗂️  Bucket: $BUCKET_NAME"
 # Build Docker image
 echo "📦 Building unified Docker image..."
 echo "📋 Copying fraudTest.csv to build context..."
-cp ../../shared_data/fraudTest.csv .
-ls -la fraudTest.csv
+mkdir -p ../shared_data
+cp ../../shared_data/fraudTest.csv ../shared_data/fraudTest.csv
+ls -la ../shared_data/fraudTest.csv
 
-# Build the image
+# Build the image (from the model_training directory)
+cd ..
 docker build -t $TRAINING_IMAGE .
+cd deployment
 
 # Push to Google Container Registry
 echo "📤 Pushing image to GCR..."
@@ -40,7 +43,7 @@ gcloud run deploy mlops-training-api \
   --timeout 3600 \
   --concurrency 10 \
   --max-instances 3 \
-  --set-env-vars ENV=PROD,SERVICE_TYPE=training,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCS_BUCKET=$BUCKET_NAME \
+  --set-env-vars ENV=PROD,SERVICE_TYPE=training,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCS_BUCKET=$BUCKET_NAME,MLFLOW_TRACKING_URI=$MLFLOW_URI \
   --service-account mlops-service-account@${PROJECT_ID}.iam.gserviceaccount.com
 
 # Get the new URL

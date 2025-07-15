@@ -3,60 +3,33 @@
 
 echo "🚀 Starting MLOps API in $ENV mode..."
 
-# Load secrets from Google Secret Manager in production
-if [ "$ENV" = "PROD" ]; then
-    echo "🔐 Loading secrets from Google Secret Manager..."
-    python3 -c "
+# Configuration centralisée des variables d'environnement
+echo "� Setting up environment configuration..."
+python3 -c "
 import sys
 sys.path.append('/app')
 sys.path.append('/app/deployment')
-from deployment.secret_manager import setup_production_secrets
-setup_production_secrets()
+from deployment.env_config import setup_environment, TRAINING_API_REQUIRED_VARS, MOCK_API_REQUIRED_VARS, MLFLOW_SERVER_REQUIRED_VARS
+
+# Configuration centralisée
+config = setup_environment()
+
+# Validation selon le service
+service_type = '$SERVICE_TYPE'
+if service_type == 'training':
+    config.validate_required_vars(TRAINING_API_REQUIRED_VARS)
+elif service_type == 'mock':
+    config.validate_required_vars(MOCK_API_REQUIRED_VARS)
+elif service_type == 'mlflow':
+    config.validate_required_vars(MLFLOW_SERVER_REQUIRED_VARS)
 "
-    echo "✅ Secrets loaded"
-    
-    # Debug: Print environment variables
-    echo "🔍 DEBUG: Environment variables after secret loading:"
-    echo "GCS_BUCKET=$GCS_BUCKET"
-    echo "GCP_PROJECT=$GCP_PROJECT"
-    echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT"
-    echo "MLFLOW_EXPERIMENT=$MLFLOW_EXPERIMENT"
-fi
 
-# Configuration basée sur l'environnement
-if [ "$ENV" = "PROD" ]; then
-    echo "📊 Production mode: Using GCS for model storage"
-    
-    # Ensure GCS_BUCKET is set (fallback if secrets loading failed)
-    if [ -z "$GCS_BUCKET" ]; then
-        echo "⚠️ GCS_BUCKET not set, using default bucket"
-        export GCS_BUCKET="fraud-detection-jedha2024"
-    fi
-    
-    export SHARED_DATA_PATH="gs://${GCS_BUCKET}/shared_data"
-    export MODEL_PATH="gs://${GCS_BUCKET}/models"
-    
-    # Configuration MLflow pour la production (secrets already loaded)
-    export MLFLOW_TRACKING_URI="sqlite:///mlflow.db"  # Simple tracking URI for production
-    export MLFLOW_ARTIFACT_URI="gs://${GCS_BUCKET}/mlflow-artifacts"
-    export MLFLOW_BACKEND_STORE_URI="sqlite:///mlflow.db"  # Simple backend for production
-    # MLFLOW_EXPERIMENT is already loaded from secrets
-    
-else
-    echo "🔧 Development mode: Using local storage"
-    export SHARED_DATA_PATH="/app/shared_data"
-    export MODEL_PATH="/app/models"
-    
-    # Configuration MLflow pour le développement
-    export MLFLOW_TRACKING_URI="http://localhost:5000"
-    export MLFLOW_ARTIFACT_URI="./mlruns"
-    export MLFLOW_BACKEND_STORE_URI="sqlite:///mlflow.db"
-    export MLFLOW_EXPERIMENT_NAME="fraud-detection-dev"
-fi
+echo "✅ Environment configuration complete"
 
-# Créer les répertoires nécessaires en mode DEV
-if [ "$ENV" != "PROD" ]; then
-    mkdir -p /app/shared_data /app/models /app/mlruns
+# Validation optionnelle (pour debug)
+if [ "$DEBUG_ENV" = "true" ]; then
+    echo "🔍 Running environment validation..."
+    python3 /app/deployment/validate_env.py
 fi
 
 # Démarrer l'API appropriée basée sur la variable SERVICE_TYPE
