@@ -65,10 +65,13 @@ def resolve_path(name, io="input", timestamp=None):
     - PROD: uses environment-aware shared data path
     """
     if ENV == "PROD":
-        return os.path.join(SHARED_DATA_PATH, name)
+        if io == "output":
+            return os.path.join(SHARED_DATA_PATH, "preprocessed", name)
+        else:
+            return os.path.join(SHARED_DATA_PATH, name)
 
     # DEV
-    base_dir = "data/raw/" if io == "input" else SHARED_DATA_PATH
+    base_dir = "data/raw/" if io == "input" else os.path.join(SHARED_DATA_PATH, "preprocessed")
     if timestamp:
         filename = name.replace(".csv", f"_{timestamp}.csv")
         return os.path.join(base_dir, filename)
