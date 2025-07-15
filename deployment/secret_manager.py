@@ -63,6 +63,16 @@ def setup_production_secrets():
     """Configure les secrets pour la production"""
     if os.getenv("ENV") == "PROD":
         project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+        print(f"🔍 DEBUG: GOOGLE_CLOUD_PROJECT={project_id}")
         if project_id:
-            secret_manager = SecretManager(project_id)
-            secret_manager.load_secrets_to_env(PROD_SECRETS)
+            try:
+                secret_manager = SecretManager(project_id)
+                secret_manager.load_secrets_to_env(PROD_SECRETS)
+                print("🔍 DEBUG: Secrets loading completed")
+            except Exception as e:
+                print(f"❌ Error in setup_production_secrets: {e}")
+                raise
+        else:
+            print("❌ GOOGLE_CLOUD_PROJECT not set")
+    else:
+        print(f"🔍 DEBUG: ENV={os.getenv('ENV')}, skipping secrets loading")

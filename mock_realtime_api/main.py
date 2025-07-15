@@ -106,7 +106,9 @@ def generate_like(row: pd.Series, variability: float) -> dict:
 
 def generate_transactions(n: int, variability: float) -> List[dict]:
     synthetic = []
-    rows = fraud_df.sample(n=n).to_dict(orient="records")
+    # Ensure we don't sample more than available data
+    sample_size = min(n, len(fraud_df))
+    rows = fraud_df.sample(n=sample_size, replace=True if n > len(fraud_df) else False).to_dict(orient="records")
     
     for row in rows:
         tx = generate_like(pd.Series(row), variability)
@@ -121,8 +123,9 @@ def get_transactions(
     try:
         if variability <= 0.0:
             # Retourne des vraies lignes du CSV
-            sampled = fraud_df.sample(n=n, random_state=42).to_dict(orient="records") # #fraud_df.sample(n=n).to_dict(orient="records")
-            print(f"[VAR={variability:.2f}] Returning {n} real transactions.")
+            sample_size = min(n, len(fraud_df))
+            sampled = fraud_df.sample(n=sample_size, replace=True if n > len(fraud_df) else False, random_state=42).to_dict(orient="records")
+            print(f"[VAR={variability:.2f}] Returning {sample_size} real transactions.")
             return sampled
 
         elif variability >= 1.0:

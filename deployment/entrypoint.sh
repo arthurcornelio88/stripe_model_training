@@ -14,6 +14,13 @@ from deployment.secret_manager import setup_production_secrets
 setup_production_secrets()
 "
     echo "✅ Secrets loaded"
+    
+    # Debug: Print environment variables
+    echo "🔍 DEBUG: Environment variables after secret loading:"
+    echo "GCS_BUCKET=$GCS_BUCKET"
+    echo "GCP_PROJECT=$GCP_PROJECT"
+    echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT"
+    echo "MLFLOW_EXPERIMENT=$MLFLOW_EXPERIMENT"
 fi
 
 # Configuration basée sur l'environnement
