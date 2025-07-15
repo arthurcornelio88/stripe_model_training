@@ -19,6 +19,13 @@ fi
 # Configuration basée sur l'environnement
 if [ "$ENV" = "PROD" ]; then
     echo "📊 Production mode: Using GCS for model storage"
+    
+    # Ensure GCS_BUCKET is set (fallback if secrets loading failed)
+    if [ -z "$GCS_BUCKET" ]; then
+        echo "⚠️ GCS_BUCKET not set, using default bucket"
+        export GCS_BUCKET="fraud-detection-jedha2024"
+    fi
+    
     export SHARED_DATA_PATH="gs://${GCS_BUCKET}/shared_data"
     export MODEL_PATH="gs://${GCS_BUCKET}/models"
     
