@@ -1,107 +1,110 @@
-# 🚀 MLOps Fraud Detection API - Guide Complet
+# 🚀 MLOps Fraud Detection API - Complete Guide
 
-## 📋 Table des Matières
+## 📋 Table of Contents
 
-1. [Configuration et Déploiement](#configuration-et-déploiement)
-2. [URLs des Services](#urls-des-services)
-3. [Authentification](#authentification)
-4. [Endpoints API](#endpoints-api)
-5. [Exemples d'Usage](#exemples-dusage)
-6. [Monitoring et Debug](#monitoring-et-debug)
+1. [Configuration and Deployment](#configuration-and-deployment)
+2. [Service URLs](#service-urls)
+3. [Authentication](#authentication)
+4. [API Endpoints](#api-endpoints)
+5. [Usage Examples](#usage-examples)
+6. [Monitoring and Debug](#monitoring-and-debug)
 7. [Troubleshooting](#troubleshooting)
 
 ---
 
-## 📦 Configuration et Déploiement
+## 📦 Configuration and Deployment
 
-### Mode Développement (Local)
+### Development Mode (Local)
 ```bash
-# Démarrer tous les services localement
+# Start all services locally
 cd model_training/
 docker compose up
 
-# Services disponibles:
+# Available services:
 # - Training API: http://localhost:8000
+# - Mock data API: http://localhost:8000
 # - MLflow UI: http://localhost:5000
 ```
 
-### Mode Production (Cloud Run)
+### Production Mode (Cloud Run)
 ```bash
-# Déployer tous les services
+# Deploy all services
 cd model_training/deployment/
 ./deploy_all_services.sh
 
-# Ou déployer seulement l'API de training
+# Or deploy only the training API
 ./deploy_training_only.sh
 ```
 
 ---
 
-## 🌐 URLs des Services
+## 🌐 Service URLs
 
-### 🔧 Développement (Local)
+### 🔧 Development (Local)
 ```bash
-# API de Training
+# Training API and mock data streaming
 TRAINING_API_URL="http://localhost:8000"
 
-# Interface MLflow
+# MLflow UI
 MLFLOW_UI_URL="http://localhost:5000"
 ```
 
 ### 🚀 Production (Cloud Run)
 ```bash
-# API de Training
+# Training API
 TRAINING_API_URL="https://mlops-training-api-bxzifydblq-ew.a.run.app"
 
-# API Mock (génération de données de test)
+# Mock API (test data generation)
 MOCK_API_URL="https://mlops-mock-api-bxzifydblq-ew.a.run.app"
 
-# Interface MLflow
+# MLflow UI
 MLFLOW_UI_URL="https://mlops-mlflow-bxzifydblq-ew.a.run.app"
 ```
 
 ---
 
-## 🔐 Authentification
+## 🔐 Authentication
 
 ### Local
-Aucune authentification requise.
+Depending on the services used, you'll need to retrieve and set up the .json files with permissions (google_credentials).
 
 ### Production
-Les services Cloud Run sont configurés avec `--allow-unauthenticated` pour simplifier l'accès. En production réelle, vous devriez configurer l'authentification IAM.
+Cloud Run services are configured with `--allow-unauthenticated` to simplify access. For real production, you should configure IAM authentication.
 
 ---
 
-## 🔌 Endpoints API
+## 🔌 API Endpoints
 
 ### 1. 🏥 Health Check
 
-**Endpoint**: `GET /health` ou `GET /ping`
-**But**: Vérifier que l'API est opérationnelle
+**Endpoint**: `GET /ping`
+**Purpose**: Check if the API is operational
 
 #### 💻 Local
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:8000/ping
 ```
 
 #### ☁️ Production
 ```bash
-curl https://mlops-training-api-bxzifydblq-ew.a.run.app/health
+curl https://mlops-training-api-bxzifydblq-ew.a.run.app/ping
 ```
 
-**Réponse**:
+**Response**:
 ```json
 {"status": "alive"}
 ```
+
+> 📸 **Screenshot needed**: Terminal output showing successful health check response
 
 ---
 
 ### 2. 🔄 Preprocessing
 
 **Endpoint**: `POST /preprocess`
-**But**: Préprocesser les données brutes pour l'entraînement
+**Purpose**: Preprocess raw data for training
 
-#### 📝 Corps de la requête
+#### 📝 Request Body
 ```json
 {
   "input_path": "data/raw/fraudTest.csv",
@@ -133,17 +136,19 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/preprocess \
   --max-time 300
 ```
 
+> 📸 **Screenshot needed**: Terminal output showing preprocessing progress and completion
+
 ---
 
 ### 3. 🤖 Training
 
 **Endpoint**: `POST /train`
-**But**: Entraîner un modèle de détection de fraude
+**Purpose**: Train a fraud detection model
 
-#### 📝 Corps de la requête
+#### 📝 Request Body
 ```json
 {
-  "timestamp": "20250715_195232",
+  "timestamp": "20250715_195232", # corresponds to datetime of training and test datasets to use
   "learning_rate": 0.1,
   "epochs": 100,
   "test": false
@@ -175,7 +180,7 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/train \
   --max-time 600
 ```
 
-**Réponse**:
+**Response**:
 ```json
 {
   "status": "training complete",
@@ -190,14 +195,16 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/train \
 }
 ```
 
+> 📸 **Screenshot needed**: Terminal output showing training progress and final metrics
+
 ---
 
 ### 4. 🔍 Validation
 
 **Endpoint**: `POST /validate`
-**But**: Évaluer les performances d'un modèle
+**Purpose**: Evaluate model performance
 
-#### 📝 Corps de la requête
+#### 📝 Request Body
 ```json
 {
   "model_name": "catboost_model_20250715_195232.cbm",
@@ -226,14 +233,16 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/validate \
   --max-time 300
 ```
 
+> 📸 **Screenshot needed**: Terminal output showing validation metrics and results
+
 ---
 
 ### 5. 🔮 Prediction
 
 **Endpoint**: `POST /predict`
-**But**: Faire des prédictions sur de nouvelles données
+**Purpose**: Make predictions on new data
 
-#### 📝 Corps de la requête
+#### 📝 Request Body
 ```json
 {
   "input_path": "data/processed/X_pred_20250715_195232.csv",
@@ -265,14 +274,16 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/predict \
   --max-time 300
 ```
 
+> 📸 **Screenshot needed**: Terminal output showing prediction process and completion
+
 ---
 
 ### 6. 📊 Monitoring (Data Drift)
 
 **Endpoint**: `POST /monitor`
-**But**: Détecter la dérive des données entre deux jeux de données
+**Purpose**: Detect data drift between two datasets
 
-#### 📝 Corps de la requête
+#### 📝 Request Body
 ```json
 {
   "reference_path": "data/processed/X_test_20250715_195232.csv",
@@ -304,7 +315,7 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/monitor \
   --max-time 300
 ```
 
-**Réponse**:
+**Response**:
 ```json
 {
   "drift_summary": {
@@ -316,17 +327,19 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/monitor \
 }
 ```
 
+> 📸 **Screenshot needed**: Terminal output showing drift detection analysis and results
+
 ---
 
-## 🎯 Exemples d'Usage
+## 🎯 Usage Examples
 
-### Workflow Complet en Production
+### Complete Production Workflow
 
 ```bash
-# 1. Vérifier la santé de l'API
-curl https://mlops-training-api-bxzifydblq-ew.a.run.app/health
+# 1. Check API health
+curl https://mlops-training-api-bxzifydblq-ew.a.run.app/ping
 
-# 2. Préprocesser les données
+# 2. Preprocess data
 curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/preprocess \
   -H "Content-Type: application/json" \
   -d '{
@@ -336,7 +349,7 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/preprocess \
   }' \
   --max-time 300
 
-# 3. Entraîner le modèle
+# 3. Train the model
 curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/train \
   -H "Content-Type: application/json" \
   -d '{
@@ -346,7 +359,7 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/train \
   }' \
   --max-time 600
 
-# 4. Faire des prédictions
+# 4. Make predictions
 curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/predict \
   -H "Content-Type: application/json" \
   -d '{
@@ -356,7 +369,7 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/predict \
   }' \
   --max-time 300
 
-# 5. Surveiller la dérive des données
+# 5. Monitor data drift
 curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/monitor \
   -H "Content-Type: application/json" \
   -d '{
@@ -367,60 +380,36 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/monitor \
   --max-time 300
 ```
 
-### Script de Test Automatisé
-
-```bash
-#!/bin/bash
-# test_production_api.sh
-
-API_URL="https://mlops-training-api-bxzifydblq-ew.a.run.app"
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-
-echo "🚀 Testing Production API: $API_URL"
-echo "📅 Timestamp: $TIMESTAMP"
-
-# Test Health Check
-echo "🏥 Testing health check..."
-curl -s "$API_URL/health" | jq .
-
-# Test Training
-echo "🤖 Testing training..."
-curl -X POST "$API_URL/train" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"timestamp\": \"$TIMESTAMP\",
-    \"learning_rate\": 0.1,
-    \"epochs\": 10
-  }" \
-  --max-time 600 | jq .
-
-echo "✅ Tests completed!"
-```
+> 📸 **Screenshot needed**: Terminal output showing complete workflow execution from health check to drift monitoring
 
 ---
 
-## 📊 Monitoring et Debug
+## 📊 Monitoring and Debug
 
-### Interface Swagger
+### Swagger Interface
 - **Local**: http://localhost:8000/docs
 - **Production**: https://mlops-training-api-bxzifydblq-ew.a.run.app/docs
+
+> 📸 **Screenshot needed**: Swagger UI showing all available endpoints
 
 ### MLflow UI
 - **Local**: http://localhost:5000
 - **Production**: https://mlops-mlflow-bxzifydblq-ew.a.run.app
 
-### Vérification des Logs
+> 📸 **Screenshot needed**: MLflow UI showing experiment tracking and model metrics
+
+### Log Verification
 ```bash
-# Logs Cloud Run
+# Cloud Run logs
 gcloud run services logs read mlops-training-api --region=europe-west1
 
-# Logs en temps réel
+# Real-time logs
 gcloud run services logs tail mlops-training-api --region=europe-west1
 ```
 
-### Variables d'Environnement de Debug
+### Debug Environment Variables
 ```bash
-# Activer le debug des variables d'environnement
+# Enable environment variable debug
 gcloud run services update mlops-training-api \
   --set-env-vars DEBUG_ENV=true \
   --region=europe-west1
@@ -430,92 +419,92 @@ gcloud run services update mlops-training-api \
 
 ## 🔧 Troubleshooting
 
-### Problèmes Courants
+### Common Issues
 
-#### 1. Erreur 500 - Internal Server Error
+#### 1. Error 500 - Internal Server Error
 ```bash
-# Vérifier les logs
+# Check logs
 gcloud run services logs read mlops-training-api --region=europe-west1 --limit=50
 
-# Vérifier les variables d'environnement
+# Check environment variables
 curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/debug/env
 ```
 
-#### 2. Timeout lors de l'entraînement
+#### 2. Training Timeout
 ```bash
-# Augmenter le timeout de la requête
+# Increase request timeout
 curl ... --max-time 900  # 15 minutes
 
-# Réduire le nombre d'epochs pour tester
+# Reduce epochs for testing
 {
   "epochs": 5,
   "learning_rate": 0.1
 }
 ```
 
-#### 3. Problème de connexion MLflow
+#### 3. MLflow Connection Issue
 ```bash
-# Vérifier l'état du service MLflow
+# Check MLflow service status
 curl https://mlops-mlflow-bxzifydblq-ew.a.run.app/health
 
-# Vérifier les secrets
+# Check secrets
 gcloud secrets versions access latest --secret="mlflow-tracking-uri"
 ```
 
-#### 4. Problème d'accès aux données GCS
+#### 4. GCS Data Access Issue
 ```bash
-# Vérifier les permissions du service account
+# Check service account permissions
 gcloud projects get-iam-policy jedha2024 \
   --flatten="bindings[].members" \
   --format="value(bindings.role)" \
   --filter="bindings.members:mlops-service-account@jedha2024.iam.gserviceaccount.com"
 ```
 
-### Commandes de Diagnostic
+### Diagnostic Commands
 
 ```bash
-# Redémarrer le service
+# Restart service
 gcloud run services update mlops-training-api \
   --region=europe-west1 \
   --set-env-vars RESTART=$(date +%s)
 
-# Vérifier les métriques
+# Check metrics
 gcloud run services describe mlops-training-api \
   --region=europe-west1 \
   --format="value(status.url,status.latestReadyRevisionName)"
 
-# Tester la connectivité
-curl -I https://mlops-training-api-bxzifydblq-ew.a.run.app/health
+# Test connectivity
+curl -I https://mlops-training-api-bxzifydblq-ew.a.run.app/ping
 ```
 
 ---
 
-## 📚 Ressources Supplémentaires
+## 📚 Additional Resources
 
-- [Documentation FastAPI](https://fastapi.tiangolo.com/)
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [MLflow Documentation](https://mlflow.org/docs/latest/index.html)
 - [Google Cloud Run Documentation](https://cloud.google.com/run/docs)
 - [CatBoost Documentation](https://catboost.ai/docs/)
 
 ---
 
-## 🆕 Nouveautés
+## 🆕 What's New
 
-### Version 2.0 - Janvier 2025
-- ✅ **Gestion centralisée des variables d'environnement**
-- ✅ **Connexion MLflow en production résolue**
-- ✅ **Validation automatique des variables requises**
-- ✅ **Scripts de déploiement optimisés**
-- ✅ **Debug intégré avec `DEBUG_ENV=true`**
-- ✅ **Fallbacks robustes pour les variables manquantes**
+### Version 2.0 - January 2025
+- ✅ **Centralized Environment Variable Management**
+- ✅ **Production MLflow Connection Fixed**
+- ✅ **Automatic Required Variable Validation**
+- ✅ **Optimized Deployment Scripts**
+- ✅ **Integrated Debug Mode with `DEBUG_ENV=true`**
+- ✅ **Robust Fallbacks for Missing Variables**
 
-### Migration depuis v1.0
-Les appels API restent identiques, mais :
-- Les URLs de production ont changé
-- Les variables d'environnement sont maintenant auto-validées
-- MLflow fonctionne maintenant correctement en production
-- Les timeouts sont mieux gérés
+### Migration from v1.0
+API calls remain the same, but:
+- Production URLs have changed
+- Environment variables are now auto-validated
+- MLflow now works correctly in production
+- Better timeout handling
 
 ---
 
-*Dernière mise à jour : 15 juillet 2025*
+*Last updated: July 16, 2025*

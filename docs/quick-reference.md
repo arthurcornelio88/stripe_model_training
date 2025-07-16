@@ -16,8 +16,10 @@ https://mlops-mock-api-bxzifydblq-ew.a.run.app
 
 ### Health Check
 ```bash
-curl https://mlops-training-api-bxzifydblq-ew.a.run.app/health
+curl https://mlops-training-api-bxzifydblq-ew.a.run.app/ping
 ```
+
+> 📸 **Screenshot needed**: Terminal output showing health check response
 
 ### Quick Training
 ```bash
@@ -26,6 +28,8 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/train \
   -d '{"timestamp": "20250715_195232", "learning_rate": 0.1, "epochs": 10}' \
   --max-time 600
 ```
+
+> 📸 **Screenshot needed**: Training output with metrics
 
 ### Production Preprocessing
 ```bash
@@ -39,6 +43,8 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/preprocess \
   --max-time 300
 ```
 
+> 📸 **Screenshot needed**: Preprocessing completion message
+
 ### Production Prediction
 ```bash
 curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/predict \
@@ -50,6 +56,8 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/predict \
   }' \
   --max-time 300
 ```
+
+> 📸 **Screenshot needed**: Prediction results summary
 
 ## Deployment
 
