@@ -6,26 +6,12 @@ from dotenv import load_dotenv
 import mlflow
 import json
 import gcsfs
+from model_training_api.utils.storage_path import get_storage_path
 
 load_dotenv()
 
 ENV = os.getenv("ENV", "DEV")
-BUCKET = os.getenv("GCP_BUCKET")
-SHARED_DATA_PATH = os.getenv("SHARED_DATA_PATH")
 
-def resolve_path(relative_path):
-    """Resolve file path based on environment"""
-    if ENV == "PROD":
-        return f"gs://{BUCKET}/{SHARED_DATA_PATH}/{relative_path}"
-    else:
-        return f"/app/shared_data/{relative_path}"
-
-def get_file_path(filename, subfolder=""):
-    """Get file path with optional subfolder"""
-    if subfolder:
-        return resolve_path(f"{subfolder}/{filename}")
-    else:
-        return resolve_path(filename)
 
 def load_model(model_path):
     model = CatBoostClassifier()
@@ -49,7 +35,7 @@ def run_inference(model, df):
 
 def run_prediction(input_path: str, model_name: str, output_path: str):
     # Déduire le bon chemin du modèle
-    model_path = get_file_path(model_name, "models") if ENV == "PROD" else os.path.join("models", model_name)
+    model_path = get_storage_path("models", model_name)
     model = load_model(model_path)
 
     # Charger les données d'entrée (via read_csv_flexible dans main.py)
@@ -76,9 +62,9 @@ def run_prediction(input_path: str, model_name: str, output_path: str):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input_path", type=str, default="data/processed/new_data.csv")
+    parser.add_argument("--input_path", type=str, default=get_storage_path("shared_data/preprocessed", "new_data.csv"))
     parser.add_argument("--model_name", type=str, default="catboost_model.cbm")
-    parser.add_argument("--output_path", type=str, default="data/predictions.csv")
+    parser.add_argument("--output_path", type=str, default=get_storage_path("shared_data/predictions", "predictions.csv"))
     args = parser.parse_args()
 
     run_prediction(args.input_path, args.model_name, args.output_path)

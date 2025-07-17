@@ -5,6 +5,7 @@ from sklearn.metrics import classification_report, roc_auc_score
 from sklearn.model_selection import train_test_split
 from dotenv import load_dotenv
 import os
+from model_training_api.utils.storage_path import get_storage_path
 import glob
 from mlflow.tracking import MlflowClient
 import requests
@@ -16,7 +17,7 @@ import time
 from google.cloud import storage
 from .mlflow_config import MLflowConfig
 from .storage_utils import StorageManager
-import datetime
+from datetime import datetime
 
 load_dotenv()
 
@@ -90,18 +91,23 @@ def get_file_path(filename, io="input"):
     """
     Return environment-aware file path
     """
-    if ENV == "PROD":
-        return os.path.join(SHARED_DATA_PATH, filename)
+    if io == "input":
+        # Raw data
+        return get_storage_path("shared_data/raw", filename)
+    elif io == "preprocessed":
+        return get_storage_path("shared_data/preprocessed", filename)
+    elif io == "models":
+        return get_storage_path("models", filename)
     else:
-        base_dir = "data/raw/" if io == "input" else SHARED_DATA_PATH
-        return os.path.join(base_dir, filename)
+        return get_storage_path("shared_data", filename)
 
 
 def get_latest_file(pattern):
     """
     Return the most recently modified file matching the pattern.
     """
-    files = glob(pattern)
+    import glob
+    files = glob.glob(pattern)
     if not files:
         raise FileNotFoundError(f"No files match pattern: {pattern}")
     files.sort(key=os.path.getmtime, reverse=True)
@@ -115,25 +121,19 @@ def resolve_path(name, io="input", timestamp=None):
     - DEV: loads latest or specific timestamped CSV from local folder
     - PROD: uses environment-aware shared data path
     """
-    if ENV == "PROD":
-        if io == "output":
-            base_path = os.path.join(SHARED_DATA_PATH, "preprocessed")
-        else:
-            base_path = SHARED_DATA_PATH
-        
-        if timestamp:
-            filename = name.replace(".csv", f"_{timestamp}.csv")
-            return os.path.join(base_path, filename)
-        else:
-            return os.path.join(base_path, name)
-
-    # DEV
-    base_dir = "data/raw/" if io == "input" else os.path.join(SHARED_DATA_PATH, "preprocessed")
     if timestamp:
         filename = name.replace(".csv", f"_{timestamp}.csv")
-        return os.path.join(base_dir, filename)
+        if io == "input":
+            return get_storage_path("shared_data/raw", filename)
+        elif io == "preprocessed" or io == "output":
+            return get_storage_path("shared_data/preprocessed", filename)
+        elif io == "models":
+            return get_storage_path("models", filename)
+        else:
+            return get_storage_path("shared_data", filename)
     else:
-        pattern = os.path.join(base_dir, name.replace(".csv", "_*.csv"))
+        # Find latest file in preprocessed dir
+        pattern = get_storage_path("shared_data/preprocessed", name.replace(".csv", "_*.csv"))
         return get_latest_file(pattern)
 
 
@@ -298,7 +298,6 @@ def log_mlflow(model, params, metrics, report):
 
 def save_model(model, model_name="catboost_model.cbm"):
     """Sauvegarde le modèle selon l'environnement avec horodatage"""
-    from datetime import datetime
     
     # Horodater le nom du fichier
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -651,6 +650,10 @@ def run_fine_tuning(
     # print(f"🔍 DEBUG: Model expects features: {model_features}")
     # print(f"🔍 DEBUG: Data has features: {list(X_train_sample.columns)}")
     
+    # Safety: close any active MLflow run before starting a new one
+    if mlflow.active_run() is not None:
+        print("⚠️ Found active MLflow run, closing it before starting a new one.")
+        mlflow.end_run()
     with mlflow.start_run():
         # Parameters à logger
         params = {
@@ -698,11 +701,14 @@ def run_fine_tuning(
 
     run_id = mlflow.active_run().info.run_id
     print(f"📊 MLflow Run ID: {run_id}")
-    
+
     print(f"✅ Fine-tuning complete!")
     print(f"🔍 DEBUG: model_path in response: {model_path}")
     print(f"📊 New AUC: {auc:.4f} | F1: {metrics['f1']:.4f}")
-    
+
+    # Ensure MLflow run is closed
+    mlflow.end_run()
+
     return {
         "auc": auc,
         "metrics": metrics,

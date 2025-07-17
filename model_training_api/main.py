@@ -15,6 +15,7 @@ from model_training_api.src.validate_model import run_validation
 from model_training_api.src.preprocessing import run_preprocessing
 
 from model_training_api.utils.file_io import read_csv_flexible
+from model_training_api.utils.storage_path import get_storage_path
 
 from evidently.report import Report
 from evidently.metric_preset import DataDriftPreset
@@ -54,15 +55,15 @@ class PreprocessDirectRequest(BaseModel):
 def preprocess_direct(request: PreprocessDirectRequest):
     # Use environment-aware paths
     shared_data_path = os.getenv("SHARED_DATA_PATH", "/app/shared_data")
-    tmp_dir = os.path.join(shared_data_path, "tmp")
+    tmp_dir = get_storage_path("shared_data/tmp", "")
     os.makedirs(tmp_dir, exist_ok=True)
 
-    tmp_input = os.path.join(tmp_dir, f"raw_input_{uuid4().hex}.csv")
+    tmp_input = get_storage_path("shared_data/tmp", f"raw_input_{uuid4().hex}.csv")
     df = pd.DataFrame(request.data).reset_index(drop=True)
     df.to_csv(tmp_input, index=False)
 
-    # Use environment-aware output directory
-    output_dir = shared_data_path
+    output_dir = get_storage_path("shared_data/preprocessed", "")
+    os.makedirs(output_dir, exist_ok=True)
 
     timestamp = run_preprocessing(
         input_path=tmp_input,
@@ -187,7 +188,7 @@ def validate_model_endpoint(request: ValidateRequest):
 class PredictRequest(BaseModel):
     input_path: str
     model_name: Optional[str] = "catboost_model.cbm"
-    output_path: Optional[str] = "data/predictions.csv"
+    output_path: Optional[str] = get_storage_path("shared_data/predictions", "predictions.csv")
 
 @app.post("/predict")
 def predict_endpoint(request: PredictRequest):

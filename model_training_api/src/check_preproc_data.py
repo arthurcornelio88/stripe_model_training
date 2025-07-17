@@ -3,6 +3,7 @@ import numpy as np
 from dotenv import load_dotenv
 from glob import glob
 import os
+from model_training_api.utils.storage_path import get_storage_path
 import argparse
 
 load_dotenv()
@@ -14,20 +15,20 @@ SHARED_DATA_PATH = os.getenv("SHARED_DATA_PATH")
 def resolve_base_path(relative_path):
     """Resolve file path based on environment"""
     if ENV == "PROD":
-        return f"gs://{BUCKET}/{SHARED_DATA_PATH}/{relative_path}"
+        # Use get_storage_path for consistency
+        return get_storage_path("shared_data/preprocessed", relative_path)
     else:
-        return f"/app/shared_data/{relative_path}"
+        return get_storage_path("shared_data/preprocessed", relative_path)
 
 def resolve_latest_path(name, io="output", timestamp=None):
-    base_dir = "data/raw/" if io == "input" else "data/processed/"
-    if ENV == "PROD":
-        return resolve_base_path(f"processed/{name}")
-    elif timestamp:
+    if timestamp:
         filename = name.replace(".csv", f"_{timestamp}.csv")
-        return os.path.join(base_dir, filename)
+        return get_storage_path("shared_data/preprocessed", filename)
     else:
-        pattern = os.path.join(base_dir, name.replace(".csv", "_*.csv"))
-        files = glob(pattern)
+        # Find latest file in preprocessed dir
+        import glob
+        pattern = get_storage_path("shared_data/preprocessed", name.replace(".csv", "_*.csv"))
+        files = glob.glob(pattern)
         if not files:
             raise FileNotFoundError(f"No files found matching pattern: {pattern}")
         files.sort(key=os.path.getmtime, reverse=True)

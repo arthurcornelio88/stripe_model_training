@@ -1,5 +1,5 @@
+version: '3.8'
 services:
-
   model-api:
     build:
       context: ./model_training_api
@@ -7,17 +7,17 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - .env
-    user: "${UID}:${GID}"
+      - .env.dev
     volumes:
       - ./model_training_api:/app/model_training_api
       - ./reports:/app/reports
       - ./data:/app/data
       - ./models:/app/models
       - ../shared_data:/app/shared_data
+      - ./mlruns:/app/mlruns
     networks:
       - mlnet
-    
+
   mlflow:
     build:
       context: ./mlflow_server
@@ -25,23 +25,25 @@ services:
     container_name: mlflow
     ports:
       - "5000:5000"
+    environment:
+      - MLFLOW_TRACKING_URI=file:/mlruns
     volumes:
-      - ./mlruns:/mlflow/mlruns
+      - ./mlruns:/mlruns
     networks:
       - mlnet
 
   mock-api:
     build:
-       context: ./mock_realtime_api
+      context: ./mock_realtime_api
     container_name: mock-api
     ports:
-    - "8001:8000"
+      - "8001:8000"
+    env_file:
+      - .env.dev
     volumes:
       - ./mock_realtime_api:/app/mock_realtime_api
       - ./data:/app/data
       - ../shared_data:/app/shared_data
-    env_file:
-      - .env
     networks:
       - mlnet
 
