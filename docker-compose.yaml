@@ -18,17 +18,17 @@ services:
     networks:
       - mlnet
     
-  # mlflow:
-  #   build:
-  #     context: ./mlflow_server
-  #     dockerfile: Dockerfile
-  #   container_name: mlflow
-  #   ports:
-  #     - "5000:5000"
-  #   volumes:
-  #     - ./mlruns:/mlflow/mlruns
-  #   networks:
-  #     - mlnet
+  mlflow:
+    build:
+      context: ./mlflow_server
+      dockerfile: Dockerfile
+    container_name: mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/mlflow/mlruns
+    networks:
+      - mlnet
 
   mock-api:
     build:
