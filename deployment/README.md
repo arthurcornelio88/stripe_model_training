@@ -26,45 +26,6 @@ cd model_training/deployment/
 - [ ] Required APIs enabled
 - [ ] GCS bucket created
 
-## What Gets Deployed
-
-The script deploys 3 unified Cloud Run services from the same Docker image:
-
-### 🧠 Model Training API (`mlops-training-api`)
-- **Purpose**: Train/retrain fraud detection models
-- **Resources**: 2GB RAM, 2 CPU cores
-- **Timeout**: 10 minutes
-- **Endpoints**:
-  - `POST /train` - Train new model
-  - `POST /fine-tune` - Fine-tune existing model
-  - `POST /preprocess` - Preprocess data
-  - `POST /predict` - Make predictions
-  - `GET /health` - Health check
-
-### 🔄 Mock Realtime API (`mlops-mock-api`)
-- **Purpose**: Simulate real transaction data for testing
-- **Resources**: 1GB RAM, 1 CPU core
-- **Timeout**: 5 minutes
-- **Endpoints**:
-  - `GET /transactions` - Generate mock transactions
-  - `GET /health` - Health check
-
-### 📊 MLflow Tracking Server (`mlops-mlflow`)
-- **Purpose**: Experiment tracking and model registry
-- **Resources**: 1GB RAM, 1 CPU core
-- **Port**: 8080
-- **Interface**: Web UI for model tracking
-
-## Environment Variables Set
-
-Each service gets these environment variables:
-
-```bash
-ENV=PROD                           # Production mode
-SERVICE_TYPE=training|mock|mlflow  # Service-specific behavior
-GOOGLE_CLOUD_PROJECT=your-project  # For secret access
-```
-
 ## Post-Deployment Steps
 
 ### 1. Get Service URLs
@@ -81,7 +42,7 @@ gcloud run services describe mlops-training-api --region=europe-west1 --format='
 
 ```bash
 # Test training API
-curl -X GET "$(gcloud run services describe mlops-training-api --region=europe-west1 --format='value(status.url)')/health"
+curl -X GET "$(gcloud run services describe mlops-training-api --region=europe-west1 --format='value(status.url)')/ping"
 
 # Test mock API
 curl -X GET "$(gcloud run services describe mlops-mock-api --region=europe-west1 --format='value(status.url)')/transactions"
