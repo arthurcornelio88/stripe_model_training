@@ -32,7 +32,8 @@ def get_file_path(filename, subfolder=""):
 def load_model(model_path):
     model = CatBoostClassifier()
     if model_path.startswith("gs://"):
-        fs = gcsfs.GCSFileSystem()
+        fs = gcsfs.GCSFileSystem(skip_instance_cache=True, cache_timeout=0)
+
         with fs.open(model_path, "rb") as f:
             model.load_model(f)
     else:

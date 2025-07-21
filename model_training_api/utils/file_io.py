@@ -2,6 +2,7 @@ import pandas as pd
 from fastapi import HTTPException
 from typing import Literal
 import os
+import gcsfs, time
 
 def read_csv_flexible(path: str, env: Literal["DEV", "PROD"] = "DEV") -> pd.DataFrame:
     if env == "DEV":
@@ -29,3 +30,12 @@ def read_csv_flexible(path: str, env: Literal["DEV", "PROD"] = "DEV") -> pd.Data
     else:
         raise HTTPException(status_code=500, detail="Invalid ENV value")
 
+def wait_for_gcs(path: str, timeout: int = 30):
+    fs = gcsfs.GCSFileSystem(skip_instance_cache=True, cache_timeout=0)
+    for i in range(timeout):
+        if fs.exists(path):
+            print(f"✅ GCS file detected: {path}")
+            return
+        print(f"⏳ Waiting GCS ({i+1}/{timeout}) for: {path}")
+        time.sleep(1)
+    raise FileNotFoundError(f"❌ GCS file still not found after {timeout}s: {path}")

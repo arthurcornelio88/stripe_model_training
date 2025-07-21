@@ -8,6 +8,8 @@ import pandas as pd
 import time
 import random
 from uuid import uuid4
+import gcsfs
+from utils.file_io import wait_for_gcs
 
 from model_training_api.src.train import run_training, run_fine_tuning
 from model_training_api.src.predict import run_prediction
@@ -194,11 +196,15 @@ class PredictRequest(BaseModel):
 def predict_endpoint(request: PredictRequest):
     print(f"📥 Predict input = {request.input_path}")
 
-    assert os.path.exists(request.input_path), f"❌ Input path not found: {request.input_path}"
-    os.makedirs(os.path.dirname(request.output_path), exist_ok=True)  # 🔧 juste au cas où
-    # Assure que fichier existe (lecture pour validation)
+    # ✅ Nouveau bloc : attendre la propagation GCS
+    if request.input_path.startswith("gs://"):
+        wait_for_gcs(request.input_path, timeout=30)
+        time.sleep(2)  # 🧯 marge de sécurité
+
+    os.makedirs(os.path.dirname(request.output_path), exist_ok=True)
+
     df = read_csv_flexible(request.input_path, env=ENV)
-    df.shape  # déclenche l’erreur si non lisible
+    df.shape
 
     run_prediction(
         input_path=request.input_path,
