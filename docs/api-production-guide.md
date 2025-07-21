@@ -163,7 +163,7 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/predict \
   -H "Content-Type: application/json" \
   -d '{
     "input_path": "gs://fraud-detection-jedha2024/shared_data/preprocessed/X_pred_20250721_094715.csv",
-    "model_name": "catboost_model_20250715_195232.cbm",
+    "model_name": "catboost_model_20250715_210730.cbm",
     "output_path": "gs://fraud-detection-jedha2024/shared_data/predictions/predictions_20250715.csv"
   }'
 ```

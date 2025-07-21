@@ -29,17 +29,37 @@ def get_file_path(filename, subfolder=""):
     else:
         return resolve_path(filename)
 
-def load_model(model_path):
+# def load_model(model_path):
+#     model = CatBoostClassifier()
+#     if model_path.startswith("gs://"):
+#         fs = gcsfs.GCSFileSystem(skip_instance_cache=True, cache_timeout=0)
+
+#         with fs.open(model_path, "rb") as f:
+#             model.load_model(f)
+#     else:
+#         model.load_model(model_path)
+#     print(f"✅ Model loaded from {model_path}")
+#     return model
+
+def load_model(model_path: str):
     model = CatBoostClassifier()
+    
     if model_path.startswith("gs://"):
         fs = gcsfs.GCSFileSystem(skip_instance_cache=True, cache_timeout=0)
+        
+        # Téléchargement temporaire dans /tmp
+        local_tmp = f"/tmp/model.cbm"
+        fs.get(model_path, local_tmp)
 
-        with fs.open(model_path, "rb") as f:
-            model.load_model(f)
+        model.load_model(local_tmp)
+        print(f"✅ Model loaded from GCS: {model_path}")
+    
     else:
         model.load_model(model_path)
-    print(f"✅ Model loaded from {model_path}")
+        print(f"✅ Model loaded locally from: {model_path}")
+
     return model
+
 
 def evaluate_model(model, X_test, y_test):
     print("🔍 Running evaluation...")
