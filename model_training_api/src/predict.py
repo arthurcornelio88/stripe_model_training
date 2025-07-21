@@ -12,6 +12,7 @@ load_dotenv()
 
 ENV = os.getenv("ENV", "DEV")
 
+print("For commit")
 
 def load_model(model_path):
     model = CatBoostClassifier()
