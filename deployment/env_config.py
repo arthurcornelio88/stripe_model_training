@@ -40,7 +40,7 @@ class EnvironmentConfig:
             "MLFLOW_TRACKING_URI": "mlflow-tracking-uri", 
             "MLFLOW_EXPERIMENT": "mlflow-experiment",
             "BQ_PROJECT": "bq-project",
-            "BQ_DATASET": "bq-dataset",
+            "BQ_RAW_DATASET": "bq-raw-dataset",
             "BQ_PREDICT_DATASET": "bq-predict-dataset",
             "BQ_LOCATION": "bq-location",
             "DISCORD_WEBHOOK_URL": "discord-webhook-url",
