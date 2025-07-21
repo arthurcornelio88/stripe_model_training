@@ -138,7 +138,7 @@ curl -X POST http://localhost:8000/validate \
 curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/validate \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "catboost_model_20250715_195232.cbm",
+    "model_name": "catboost_model_20250715_210730.cbm",
     "timestamp": "20250715_195232"
   }'
 ```

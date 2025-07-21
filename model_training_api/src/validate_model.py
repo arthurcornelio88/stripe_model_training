@@ -118,81 +118,64 @@ def run_validation(
     validation_mode="historical",
     production_data=None
 ) -> dict:
-
     print(f"🌍 ENV = {ENV} | Source = {source} | Mode = {validation_mode}")
 
-    # === Mode Production : Validation directe avec données pré-calculées
+    # === Mode Production : prédictions déjà calculées
     if validation_mode == "production" and production_data:
         print("🎯 Production validation mode - using pre-calculated predictions")
-        
         y_true = production_data["y_true"]
         y_pred_proba = production_data["y_pred_proba"]
         y_pred_binary = production_data["y_pred_binary"]
-        
-        # 🔍 DEBUG : Analyser les données
-        print(f"🔍 DEBUG - Data shapes: y_true={len(y_true)}, y_pred_proba={len(y_pred_proba)}, y_pred_binary={len(y_pred_binary)}")
-        print(f"🔍 DEBUG - y_true unique values: {list(set(y_true))}")
-        print(f"🔍 DEBUG - y_pred_binary unique values: {list(set(y_pred_binary))}")
-        print(f"🔍 DEBUG - y_pred_proba range: [{min(y_pred_proba):.3f}, {max(y_pred_proba):.3f}]")
-        print(f"🔍 DEBUG - Fraud cases in y_true: {sum(y_true)} / {len(y_true)} ({100*sum(y_true)/len(y_true):.1f}%)")
-        print(f"🔍 DEBUG - Fraud predictions in y_pred_binary: {sum(y_pred_binary)} / {len(y_pred_binary)} ({100*sum(y_pred_binary)/len(y_pred_binary):.1f}%)")
-        
-        # Utiliser la fonction d'évaluation existante
+
         report, auc = evaluate_predictions(y_true, y_pred_proba, y_pred_binary)
-        
-        n_samples = len(y_true)
-        precision = report['1']['precision'] if '1' in report else 0
-        recall = report['1']['recall'] if '1' in report else 0
-        f1 = report['1']['f1-score'] if '1' in report else 0
-        
-        print(f"📊 Production AUC: {auc:.4f}")
-        print(f"📈 Métriques (n={n_samples}): Precision: {precision:.3f}, Recall: {recall:.3f}, F1: {f1:.3f}")
-        
-        # Pas de sauvegarde de rapport pour le mode production
         return {
             "auc": auc,
             "validation_type": "production",
             "data_source": source,
-            "n_samples": n_samples,
-            "precision": precision,
-            "recall": recall,
-            "f1": f1
+            "n_samples": len(y_true),
+            "precision": report["1"]["precision"],
+            "recall": report["1"]["recall"],
+            "f1": report["1"]["f1-score"]
         }
 
-    # === Mode Historical : Validation classique avec modèle
-    # Charger le modèle
+    # === Mode normal : on charge modèle + données
     model_path = get_file_path("models", model_name) if ENV == "PROD" else os.path.join("models", model_name)
     model = load_model(model_path)
 
-    # Charger ou utiliser les données
     if X_test is not None and y_test is not None:
-        print(f"🔄 Using provided data: {len(X_test)} samples")
+        print("🎯 Using directly provided test data")
         X_test = pd.DataFrame(X_test)
         y_test = pd.Series(y_test)
-        validation_type = validation_type or "production"
-        print(f"🎯 Production validation mode with {len(X_test)} samples")
+        validation_type = validation_type or "manual"
     else:
-        print(f"🔄 ENV = {ENV} | Loading historical data...")
+        print(f"🔄 Loading test or prediction data using timestamp: {timestamp}")
 
-        x_path = get_file_path(subfolder="shared_data/preprocessed", filename=f"X_test_{timestamp}.csv")
-        y_path = get_file_path(subfolder="shared_data/preprocessed", filename=f"y_test_{timestamp}.csv")
+        # Try loading test data first
+        try:
+            x_path = get_file_path("shared_data/preprocessed", f"X_test_{timestamp}.csv")
+            y_path = get_file_path("shared_data/preprocessed", f"y_test_{timestamp}.csv")
+            X_test = read_csv_flexible(x_path, env=ENV)
+            y_test = read_csv_flexible(y_path, env=ENV).squeeze()
+            validation_type = "historical"
+            print("✅ Loaded X_test and y_test")
+        except Exception as e1:
+            print(f"⚠️ Could not find X_test/y_test: {e1}")
+            print("🔄 Trying to load X_pred/y_pred instead...")
+            try:
+                x_path = get_file_path("shared_data/preprocessed", f"X_pred_{timestamp}.csv")
+                y_path = get_file_path("shared_data/preprocessed", f"y_pred_{timestamp}.csv")
+                X_test = read_csv_flexible(x_path, env=ENV)
+                y_test = read_csv_flexible(y_path, env=ENV).squeeze()
+                validation_type = "prediction"
+                print("✅ Fallback: Loaded X_pred and y_pred")
+            except Exception as e2:
+                raise FileNotFoundError(f"❌ Could not find any test or prediction data for timestamp '{timestamp}'\n{e2}")
 
-        X_test = read_csv_flexible(x_path, env=ENV)
-        y_test = read_csv_flexible(y_path, env=ENV).squeeze()
-
-        print(f"✅ Loaded X_test shape: {X_test.shape}, y_test length: {len(y_test)}")
-        validation_type = validation_type or "historical"
-
-
-    # Évaluation
+    print(f"📊 Test shape: {X_test.shape} | y_test: {y_test.shape}")
     report, auc = evaluate_model(model, X_test, y_test)
-    print(f"📊 AUC ({validation_type}): {auc:.4f}")
-
-    # Sauvegarde du rapport
-    # report_path = save_report(report, auc, output_dir="reports")
     local_path, report_path = save_report(report, auc, output_dir="shared_data/reports")
 
-    # Log MLflow si PROD
+    # Optionally log to MLflow
     if ENV == "PROD":
         mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI"))
         mlflow.set_experiment(os.getenv("MLFLOW_EXPERIMENT", "Fraud Detection CatBoost"))
@@ -200,19 +183,19 @@ def run_validation(
             mlflow.log_metric("val_auc", auc)
             mlflow.log_param("validation_type", validation_type)
             mlflow.log_artifact(local_path, artifact_path="validation")
-            print("📡 Logged to MLflow.")
-        
-        # Nettoyage uniquement si on a écrit localement dans un répertoire
-        if local_path.startswith("/tmp/") and os.path.exists(os.path.dirname(local_path)):
-            shutil.rmtree(os.path.dirname(local_path), ignore_errors=True)
+            print("📡 Logged to MLflow")
 
     return {
         "auc": auc,
         "report_path": report_path,
         "validation_type": validation_type,
         "data_source": source,
-        "n_samples": len(X_test)
+        "n_samples": len(X_test),
+        "precision": report["1"]["precision"],
+        "recall": report["1"]["recall"],
+        "f1": report["1"]["f1-score"]
     }
+
 
 
 
