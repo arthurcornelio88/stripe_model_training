@@ -77,8 +77,10 @@ class EnvironmentConfig:
         print("🔧 Setting up development environment...")
         
         # Chemins locaux
-        os.environ["SHARED_DATA_PATH"] = "/app/shared_data"
-        os.environ["MODEL_PATH"] = "/app/models"
+        os.environ["SHARED_DATA_PATH"] = "shared_data"
+        os.environ["MODEL_PATH"] = "models"
+        #os.environ["SHARED_DATA_PATH"] = "/app/shared_data"
+        #os.environ["MODEL_PATH"] = "/app/models"
         os.environ["GCS_BUCKET"] = "dev-bucket"
         os.environ["GCP_BUCKET"] = "dev-bucket"  # Alias
         
