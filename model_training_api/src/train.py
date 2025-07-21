@@ -6,6 +6,7 @@ from sklearn.model_selection import train_test_split
 from dotenv import load_dotenv
 import os
 from model_training_api.utils.storage_path import get_storage_path
+from model_training_api.utils.file_io import read_csv_flexible
 import glob
 from mlflow.tracking import MlflowClient
 import requests
@@ -150,7 +151,7 @@ def load_data(timestamp=None, test_mode=False, sample_size=5000):
     def read(name):
         path = resolve_path(name, io="output", timestamp=timestamp)
         print(f"🔄 Resolving latest path for {name}: {path}")
-        df = pd.read_csv(path)
+        df = read_csv_flexible(path, env=ENV)
         
         # print(f"🔍 DEBUG {name} loaded with columns: {list(df.columns)}")
         # print(f"🔍 DEBUG {name} shape: {df.shape}")

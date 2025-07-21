@@ -9,6 +9,8 @@ import mlflow
 import json
 import shutil
 import gcsfs
+from model_training_api.utils.file_io import read_csv_flexible
+
 
 load_dotenv()
 ENV = os.getenv("ENV", "DEV")
@@ -172,8 +174,16 @@ def run_validation(
         print(f"🎯 Production validation mode with {len(X_test)} samples")
     else:
         print(f"🔄 ENV = {ENV} | Loading historical data...")
-        _, X_test, _, y_test = load_data(timestamp=timestamp)
+
+        x_path = get_file_path(f"X_test_{timestamp}.csv", subfolder="preprocessed")
+        y_path = get_file_path(f"y_test_{timestamp}.csv", subfolder="preprocessed")
+
+        X_test = read_csv_flexible(x_path, env=ENV)
+        y_test = read_csv_flexible(y_path, env=ENV).squeeze()
+
+        print(f"✅ Loaded X_test shape: {X_test.shape}, y_test length: {len(y_test)}")
         validation_type = validation_type or "historical"
+
 
     # Évaluation
     report, auc = evaluate_model(model, X_test, y_test)
