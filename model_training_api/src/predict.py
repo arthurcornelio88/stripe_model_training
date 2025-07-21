@@ -36,30 +36,45 @@ def run_inference(model, df):
     return result
 
 def run_prediction(input_path: str, model_name: str, output_path: str):
-    # Déduire le bon chemin du modèle
+    # 🔍 Charger le modèle
     model_path = get_storage_path("models", model_name)
     model = load_model(model_path)
 
-    # Charger les données d'entrée (via read_csv_flexible dans main.py)
+    # 📥 Charger les données d'entrée
     df = pd.read_csv(input_path)
     print(f"📥 Loaded input: {df.shape} rows from {input_path}")
 
-    # Prédire
+    # 🧠 Inférence
     result = run_inference(model, df)
 
-    # Sauvegarder
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    result.to_csv(output_path, index=False)
-    print(f"📤 Saved predictions to {output_path}")
+    # 💾 Sauvegarde des prédictions
+    if output_path.startswith("gs://"):
+        fs = gcsfs.GCSFileSystem()
+        with fs.open(output_path, "w") as f:
+            result.to_csv(f, index=False)
+    else:
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        result.to_csv(output_path, index=False)
 
-    # Journaliser dans MLflow si en PROD
+    print(f"✅ Predictions saved to {output_path}")
+
+    # 📡 Logging MLflow uniquement si chemins sont locaux
     if ENV == "PROD":
         mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI"))
         mlflow.set_experiment(os.getenv("MLFLOW_EXPERIMENT", "Fraud Detection CatBoost"))
         with mlflow.start_run(run_name="batch_prediction"):
-            mlflow.log_artifact(input_path, artifact_path="inputs")
-            mlflow.log_artifact(output_path, artifact_path="outputs")
-            print("📡 Logged artifacts to MLflow")
+            if not input_path.startswith("gs://"):
+                mlflow.log_artifact(input_path, artifact_path="inputs")
+            else:
+                print(f"⚠️ Skipped MLflow log: input_path is on GCS ({input_path})")
+
+            if not output_path.startswith("gs://"):
+                mlflow.log_artifact(output_path, artifact_path="outputs")
+            else:
+                print(f"⚠️ Skipped MLflow log: output_path is on GCS ({output_path})")
+
+            print("📡 MLflow logging complete")
+
 
 
 def main():

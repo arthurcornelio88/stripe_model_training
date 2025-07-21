@@ -88,13 +88,21 @@ curl https://mlops-training-api-bxzifydblq-ew.a.run.app/ping
 curl -X POST http://localhost:8000/preprocess \
   -H "Content-Type: application/json" \
   -d '{
-    "input_path": "data/raw/fraudTest.csv",
-    "output_dir": "data/processed",
+    "input_path": "/shared_data/fraudTest.csv",
+    "output_dir": "/shared_data/preprocessed",
     "log_amt": true
   }'
 ```
-
-* En prod, remplacer les chemins par des chemins GCS (`gs://...`).
+**Production :**
+```bash
+curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/preprocess \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input_path": "gs://fraud-detection-jedha2024/shared_data/fraudTest.csv",
+    "output_dir": "gs://fraud-detection-jedha2024/preprocessed",
+    "log_amt": true
+  }'
+```
 
 ---
 
@@ -116,8 +124,18 @@ curl -X POST http://localhost:8000/train \
 
 ### 4. 🔍 Validation
 
+**Local:**
 ```bash
 curl -X POST http://localhost:8000/validate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_name": "catboost_model_20250715_195232.cbm",
+    "timestamp": "20250715_195232"
+  }'
+```
+**Production:**
+```bash
+curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/validate \
   -H "Content-Type: application/json" \
   -d '{
     "model_name": "catboost_model_20250715_195232.cbm",
@@ -127,15 +145,26 @@ curl -X POST http://localhost:8000/validate \
 
 ---
 
-### 5. 🔮 Prédiction
+### 5. 🔮 Prediction
 
+**Local:**
 ```bash
 curl -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
   -d '{
-    "input_path": "data/processed/X_pred_20250715_195232.csv",
+    "input_path": "/shared_data/preprocessed/X_pred_20250715_195232.csv",
     "model_name": "catboost_model_20250715_195232.cbm",
-    "output_path": "data/predictions.csv"
+    "output_path": "/shared_data/predictions/predictions_20250715.csv"
+  }'
+```
+**Production:**
+```bash
+curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input_path": "gs://fraud-detection-jedha2024/shared_data/preprocessed/X_pred_20250721_094715.csv",
+    "model_name": "catboost_model_20250715_195232.cbm",
+    "output_path": "gs://fraud-detection-jedha2024/shared_data/predictions/predictions_20250715.csv"
   }'
 ```
 

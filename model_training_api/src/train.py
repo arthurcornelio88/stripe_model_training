@@ -18,6 +18,7 @@ from google.cloud import storage
 from .mlflow_config import MLflowConfig
 from .storage_utils import StorageManager
 from datetime import datetime
+import gcsfs
 
 load_dotenv()
 
@@ -222,16 +223,10 @@ def check_mlflow_server(mlflow_uri, experiment_name="default"):
 
 def save_and_log_report(report_dict, run_id, output_dir="reports"):
     """
-    Sauvegarde le rapport au format JSON/HTML, puis l'upload dans MLflow.
+    Sauvegarde JSON + HTML du rapport (local ou GCS), puis log dans MLflow
     """
-    os.makedirs(output_dir, exist_ok=True)
-    json_path = os.path.join(output_dir, "classification_report.json")
-    html_path = os.path.join(output_dir, "classification_report.html")
-
-    # Enregistrement local
-    with open(json_path, "w") as f:
-        json.dump(report_dict, f, indent=2)
-
+    json_filename = "classification_report.json"
+    html_filename = "classification_report.html"
     html_content = "<html><head><title>Classification Report</title></head><body>"
     html_content += "<h2>Classification Report</h2><table border='1'>"
     html_content += "<tr><th>Label</th><th>Precision</th><th>Recall</th><th>F1-score</th><th>Support</th></tr>"
@@ -244,15 +239,35 @@ def save_and_log_report(report_dict, run_id, output_dir="reports"):
 
     html_content += "</table></body></html>"
 
-    with open(html_path, "w") as f:
+    # ➕ Fichiers temporaires pour MLflow logging
+    local_tmp_dir = f"/tmp/report_{run_id}"
+    os.makedirs(local_tmp_dir, exist_ok=True)
+    local_json = os.path.join(local_tmp_dir, json_filename)
+    local_html = os.path.join(local_tmp_dir, html_filename)
+
+    with open(local_json, "w") as f:
+        json.dump(report_dict, f, indent=2)
+    with open(local_html, "w") as f:
         f.write(html_content)
 
-    # Upload dans MLflow (dans artifacts/reports)
-    mlflow.log_artifact(json_path, artifact_path="reports")
-    mlflow.log_artifact(html_path, artifact_path="reports")
+    # 📤 Enregistrement final
+    if ENV == "PROD" and output_dir.startswith("gs://"):
+        fs = gcsfs.GCSFileSystem()
+        with fs.open(os.path.join(output_dir, json_filename), "w") as f:
+            f.write(open(local_json).read())
+        with fs.open(os.path.join(output_dir, html_filename), "w") as f:
+            f.write(open(local_html).read())
+        print(f"📁 Uploaded report to GCS: {output_dir}")
+    else:
+        os.makedirs(output_dir, exist_ok=True)
+        shutil.copy(local_json, os.path.join(output_dir, json_filename))
+        shutil.copy(local_html, os.path.join(output_dir, html_filename))
 
-    shutil.rmtree(output_dir)
+    # 📡 Log vers MLflow
+    mlflow.log_artifact(local_json, artifact_path="reports")
+    mlflow.log_artifact(local_html, artifact_path="reports")
 
+    shutil.rmtree(local_tmp_dir)
 
 
 def log_mlflow(model, params, metrics, report):

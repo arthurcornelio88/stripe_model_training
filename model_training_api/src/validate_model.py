@@ -56,15 +56,35 @@ def evaluate_predictions(y_true, y_pred_proba, y_pred_binary):
     auc = roc_auc_score(y_true, y_pred_proba)
     return report, auc
 
-def save_report(report, auc, output_dir="reports"):
-    os.makedirs(output_dir, exist_ok=True)
-    json_path = os.path.join(output_dir, "validation_report.json")
+def save_report(report, auc, output_dir="shared_data/reports"):
+    json_filename = "validation_report.json"
+    json_path = os.path.join(output_dir, json_filename)
 
     report["roc_auc"] = auc
-    with open(json_path, "w") as f:
-        json.dump(report, f, indent=2)
-    print(f"📄 Report saved to {json_path}")
-    return json_path
+
+    if ENV == "PROD" and json_path.startswith("gs://"):
+        # 1. Sauvegarde locale temporaire
+        local_temp = f"/tmp/{json_filename}"
+        with open(local_temp, "w") as f:
+            json.dump(report, f, indent=2)
+
+        # 2. Upload GCS
+        fs = gcsfs.GCSFileSystem()
+        with fs.open(json_path, "w") as f:
+            with open(local_temp, "r") as tmpf:
+                f.write(tmpf.read())
+
+        print(f"📄 Report saved to GCS: {json_path}")
+        return local_temp, json_path  # tuple (local_path, gcs_path)
+
+    else:
+        os.makedirs(output_dir, exist_ok=True)
+        with open(json_path, "w") as f:
+            json.dump(report, f, indent=2)
+        print(f"📄 Report saved locally to: {json_path}")
+        return json_path, json_path
+
+
 
 def run_validation(
     model_name="catboost_model.cbm",
@@ -77,7 +97,6 @@ def run_validation(
     validation_mode="historical",
     production_data=None
 ) -> dict:
-    import pandas as pd
 
     print(f"🌍 ENV = {ENV} | Source = {source} | Mode = {validation_mode}")
 
@@ -141,7 +160,8 @@ def run_validation(
     print(f"📊 AUC ({validation_type}): {auc:.4f}")
 
     # Sauvegarde du rapport
-    report_path = save_report(report, auc, output_dir="reports")
+    # report_path = save_report(report, auc, output_dir="reports")
+    local_path, report_path = save_report(report, auc, output_dir="shared_data/reports")
 
     # Log MLflow si PROD
     if ENV == "PROD":
@@ -150,9 +170,12 @@ def run_validation(
         with mlflow.start_run(run_name=f"validation_{validation_type}"):
             mlflow.log_metric("val_auc", auc)
             mlflow.log_param("validation_type", validation_type)
-            mlflow.log_artifact(report_path, artifact_path="validation")
+            mlflow.log_artifact(local_path, artifact_path="validation")
             print("📡 Logged to MLflow.")
-        shutil.rmtree("reports")
+        
+        # Nettoyage uniquement si on a écrit localement dans un répertoire
+        if local_path.startswith("/tmp/") and os.path.exists(os.path.dirname(local_path)):
+            shutil.rmtree(os.path.dirname(local_path), ignore_errors=True)
 
     return {
         "auc": auc,

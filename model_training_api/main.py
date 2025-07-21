@@ -55,18 +55,35 @@ class PreprocessDirectRequest(BaseModel):
 
 @app.post("/preprocess_direct")
 def preprocess_direct(request: PreprocessDirectRequest):
-    # Use environment-aware paths
-    shared_data_path = os.getenv("SHARED_DATA_PATH", "/app/shared_data")
-    tmp_dir = get_storage_path("shared_data/tmp", "")
-    os.makedirs(tmp_dir, exist_ok=True)
-
-    tmp_input = get_storage_path("shared_data/tmp", f"raw_input_{uuid4().hex}.csv")
+    # 1. Génération du fichier CSV temporaire localement
     df = pd.DataFrame(request.data).reset_index(drop=True)
-    df.to_csv(tmp_input, index=False)
+    local_tmp = f"/tmp/raw_input_{uuid4().hex}.csv"
+    df.to_csv(local_tmp, index=False)
 
+    # 2. Résolution du chemin cible (via storage path)
+    tmp_input = get_storage_path("shared_data/tmp", os.path.basename(local_tmp))
+
+    # 3. Upload vers GCS si nécessaire
+    if tmp_input.startswith("gs://"):
+        try:
+            fs = gcsfs.GCSFileSystem()
+            with fs.open(tmp_input, "w") as f:
+                with open(local_tmp, "r") as local_f:
+                    f.write(local_f.read())
+            print(f"✅ Uploaded tmp_input to GCS: {tmp_input}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to upload to GCS: {str(e)}")
+    else:
+        os.makedirs(os.path.dirname(tmp_input), exist_ok=True)
+        shutil.copy2(local_tmp, tmp_input)
+        print(f"✅ Saved tmp_input locally: {tmp_input}")
+
+    # 4. Résolution du dossier de sortie
     output_dir = get_storage_path("shared_data/preprocessed", "")
-    os.makedirs(output_dir, exist_ok=True)
+    if ENV != "PROD":
+        os.makedirs(output_dir, exist_ok=True)
 
+    # 5. Lancer le préprocessing
     timestamp = run_preprocessing(
         input_path=tmp_input,
         output_dir=output_dir,
@@ -75,6 +92,7 @@ def preprocess_direct(request: PreprocessDirectRequest):
     )
 
     return {"status": "done", "timestamp": timestamp}
+
 
 
 class TrainRequest(BaseModel):
@@ -197,11 +215,11 @@ def predict_endpoint(request: PredictRequest):
     print(f"📥 Predict input = {request.input_path}")
 
     # ✅ Nouveau bloc : attendre la propagation GCS
-    if request.input_path.startswith("gs://"):
+    if ENV == "PROD" and request.input_path.startswith("gs://"):
         wait_for_gcs(request.input_path, timeout=30)
         time.sleep(2)  # 🧯 marge de sécurité
-
-    os.makedirs(os.path.dirname(request.output_path), exist_ok=True)
+    else:
+        os.makedirs(os.path.dirname(request.output_path), exist_ok=True)
 
     df = read_csv_flexible(request.input_path, env=ENV)
     df.shape
@@ -226,8 +244,6 @@ def monitor_drift(request: DriftRequest):
     # Charger les données
     ref = read_csv_flexible(request.reference_path, env=ENV)
     curr = read_csv_flexible(request.current_path, env=ENV)
-
-    ref = read_csv_flexible(request.reference_path, env=ENV)
 
     # 🧹 Clean colonnes parasites
     if "Unnamed: 0" in ref.columns:
@@ -260,8 +276,11 @@ def monitor_drift(request: DriftRequest):
     abs_path_html = os.path.join(shared_data_path, output_html_rel)
 
     # Sauvegarde HTML
-    os.makedirs(os.path.dirname(abs_path_html), exist_ok=True)
+    if not abs_path_html.startswith("gs://"):
+        os.makedirs(os.path.dirname(abs_path_html), exist_ok=True)
+
     report.save_html(abs_path_html)
+    print(f"📄 Drift report saved to: {abs_path_html}")
 
     # Sauvegarder JSON
     json_path = abs_path_html.replace(".html", ".json")
