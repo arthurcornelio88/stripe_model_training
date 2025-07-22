@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 from dotenv import load_dotenv
 import os
 from model_training_api.utils.storage_path import get_storage_path
-from model_training_api.utils.file_io import read_csv_flexible
+from model_training_api.utils.file_io import read_csv_flexible, download_model_from_gcs
 import glob
 from mlflow.tracking import MlflowClient
 import requests
@@ -124,7 +124,13 @@ def resolve_path(name, io="input", timestamp=None):
     - PROD: uses environment-aware shared data path
     """
     if timestamp:
-        filename = name.replace(".csv", f"_{timestamp}.csv")
+        if name.endswith(".csv"):
+            filename = name.replace(".csv", f"_{timestamp}.csv")
+        elif name.endswith(".cbm"):
+            filename = name.replace(".cbm", f"_{timestamp}.cbm")
+        else:
+            filename = name.replace(".csv", f"_{timestamp}.csv")
+
         if io == "input":
             return get_storage_path("shared_data/raw", filename)
         elif io == "preprocessed" or io == "output":
@@ -546,6 +552,7 @@ def fine_tune_model(existing_model_path, X_train, y_train, X_val, y_val, learnin
 def run_fine_tuning(
     model_name: str = "catboost_model.cbm",
     timestamp: str = None,
+    timestamp_model_finetune: str = None,
     learning_rate: float = 0.01,
     epochs: int = 10
 ):
@@ -638,7 +645,7 @@ def run_fine_tuning(
     
     # Chemin du modèle existant
     if ENV == "PROD":
-        existing_model_path = resolve_path(f"models/{model_name}", timestamp)
+        existing_model_path = resolve_path(model_name, "models", timestamp_model_finetune)
     else:
         # 🔧 Chercher d'abord dans shared_data (où sont sauvegardés les nouveaux modèles)
         shared_model_path = os.path.join("/app/shared_data", model_name)
@@ -653,16 +660,18 @@ def run_fine_tuning(
         else:
             raise FileNotFoundError(f"❌ Model not found in either {shared_model_path} or {models_model_path}")
     
-    if not os.path.exists(existing_model_path):
-        raise FileNotFoundError(f"❌ Model not found: {existing_model_path}")
+    if existing_model_path.startswith("gs://"):
+        fs = gcsfs.GCSFileSystem()
+        if not fs.exists(existing_model_path):
+            raise FileNotFoundError(f"❌ Model not found: {existing_model_path}")
+        local_model_path = download_model_from_gcs(existing_model_path)
+    else:
+        if not os.path.exists(existing_model_path):
+            raise FileNotFoundError(f"❌ Model not found: {existing_model_path}")
+        local_model_path = existing_model_path
     
     print(f"✅ Found existing model at: {existing_model_path}")
     
-    # 🔍 DEBUG: Charger le modèle pour voir ses features
-    # print(f"🔍 DEBUG: Checking existing model features...")
-    temp_model = CatBoostClassifier()
-    temp_model.load_model(existing_model_path)
-    model_features = temp_model.feature_names_
     # print(f"🔍 DEBUG: Model expects features: {model_features}")
     # print(f"🔍 DEBUG: Data has features: {list(X_train_sample.columns)}")
     
@@ -685,7 +694,7 @@ def run_fine_tuning(
     
     # Fine-tuning
     model = fine_tune_model(
-        existing_model_path=existing_model_path,
+        existing_model_path=local_model_path,
         X_train=X_train_sample,
         y_train=y_train_sample,
         X_val=X_test,

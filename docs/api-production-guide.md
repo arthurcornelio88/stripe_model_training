@@ -161,11 +161,12 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/train \
     "timestamp": "20250722_100739",
     "learning_rate": 0.1,
     "epochs": 50,
-    "mode": "fine_tune"
+    "mode": "fine_tune",
+    "timestamp_model_finetune": "20250722_102656"
   }'
 ```
 
-> Takes the last model and fine-tunes it with your selected data.
+> Takes the last model and fine-tunes it with your selected data. If you want to finetune an specific model, pick `timestamp_model_finetune` parameter.
 
 * Réponse : Métriques + chemin du modèle.
 
