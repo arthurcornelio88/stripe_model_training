@@ -93,8 +93,6 @@ def preprocess_direct(request: PreprocessDirectRequest):
 
     return {"status": "done", "timestamp": timestamp}
 
-
-
 class TrainRequest(BaseModel):
     timestamp: Optional[str] = Field(
         default=None,

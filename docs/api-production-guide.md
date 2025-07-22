@@ -84,6 +84,7 @@ curl https://mlops-training-api-bxzifydblq-ew.a.run.app/ping
 
 ### 2. 🔄 Prétraitement
 
+**Local:**
 ```bash
 curl -X POST http://localhost:8000/preprocess \
   -H "Content-Type: application/json" \
@@ -94,6 +95,9 @@ curl -X POST http://localhost:8000/preprocess \
   }'
 ```
 **Production :**
+
+- Preprocessed dataset for predictions:
+
 ```bash
 curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/preprocess \
   -H "Content-Type: application/json" \
@@ -104,19 +108,64 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/preprocess \
   }'
 ```
 
+- Preprocessed dataset for full model training: 
+
+```bash
+curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/preprocess \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input_path": "gs://fraud-detection-jedha2024/shared_data/fraudTest.csv",
+    "output_dir": "gs://fraud-detection-jedha2024/preprocessed",
+    "log_amt": true,
+    "for_prediction": false
+  }'
+
+```
+
 ---
 
 ### 3. 🤖 Entraînement
 
+**Local:**
 ```bash
 curl -X POST http://localhost:8000/train \
   -H "Content-Type: application/json" \
   -d '{
-    "timestamp": "20250715_195232",
+    "timestamp": "20250721_153507",
     "learning_rate": 0.1,
     "epochs": 50
   }'
 ```
+**Production:**
+
+- Full training: 
+
+```bash
+curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/train \
+  -H "Content-Type: application/json" \
+  -d '{
+    "timestamp": "20250722_100739",
+    "learning_rate": 0.1,
+    "epochs": 50
+  }'
+```
+> "test": Defaut is `false`. If `true`, `X_raw` sample size - 5000 rows
+> "fast": Defaut is `false`. If `true`, training params configured to a fast training (bad metrics).
+
+- Fine tuning:
+
+```bash
+curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/train \
+  -H "Content-Type: application/json" \
+  -d '{
+    "timestamp": "20250722_100739",
+    "learning_rate": 0.1,
+    "epochs": 50,
+    "mode": "fine_tune"
+  }'
+```
+
+> Takes the last model and fine-tunes it with your selected data.
 
 * Réponse : Métriques + chemin du modèle.
 

@@ -216,7 +216,7 @@ def check_mlflow_server(mlflow_uri, experiment_name="default"):
     try:
         uri = mlflow_uri.rstrip("/") + "/"
         health_url = urljoin(uri, f"api/2.0/mlflow/experiments/get-by-name?experiment_name={experiment_name}")
-        response = requests.get(health_url, timeout=3)
+        response = requests.get(health_url, timeout=60) # large time for prod, if mlflow server is slow to respond
         if response.status_code not in (200, 404):  # 404 here may still be valid (experiment not found)
             raise RuntimeError(f"MLflow server responded with {response.status_code}: {response.text}")
     except requests.exceptions.RequestException as e:
@@ -638,7 +638,7 @@ def run_fine_tuning(
     
     # Chemin du modèle existant
     if ENV == "PROD":
-        existing_model_path = resolve_path(f"models/{model_name}")
+        existing_model_path = resolve_path(f"models/{model_name}", timestamp)
     else:
         # 🔧 Chercher d'abord dans shared_data (où sont sauvegardés les nouveaux modèles)
         shared_model_path = os.path.join("/app/shared_data", model_name)
