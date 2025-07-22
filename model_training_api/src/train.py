@@ -136,6 +136,8 @@ def resolve_path(name, io="input", timestamp=None):
         elif io == "preprocessed" or io == "output":
             return get_storage_path("shared_data/preprocessed", filename)
         elif io == "models":
+            if ENV == "PROD":
+                return f"gs://{GCS_BUCKET}/models/{filename}"
             return get_storage_path("models", filename)
         else:
             return get_storage_path("shared_data", filename)
