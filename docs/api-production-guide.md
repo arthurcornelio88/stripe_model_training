@@ -129,7 +129,7 @@ curl -X POST http://localhost:8000/train \
 curl -X POST http://localhost:8000/validate \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "catboost_model_20250715_195232.cbm",
+    "model_name": "catboost_model_20250715_210730.cbm",
     "timestamp": "20250715_195232"
   }'
 ```
@@ -139,7 +139,7 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/validate \
   -H "Content-Type: application/json" \
   -d '{
     "model_name": "catboost_model_20250715_210730.cbm",
-    "timestamp": "20250715_195232"
+    "timestamp": "20250721_153507"
   }'
 ```
 
@@ -153,7 +153,7 @@ curl -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
   -d '{
     "input_path": "/shared_data/preprocessed/X_pred_20250715_195232.csv",
-    "model_name": "catboost_model_20250715_195232.cbm",
+    "model_name": "catboost_model_20250715_210730.cbm",
     "output_path": "/shared_data/predictions/predictions_20250715.csv"
   }'
 ```
@@ -162,9 +162,9 @@ curl -X POST http://localhost:8000/predict \
 curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/predict \
   -H "Content-Type: application/json" \
   -d '{
-    "input_path": "gs://fraud-detection-jedha2024/shared_data/preprocessed/X_pred_20250721_094715.csv",
+    "input_path": "gs://fraud-detection-jedha2024/shared_data/preprocessed/X_pred_20250721_153507.csv",
     "model_name": "catboost_model_20250715_210730.cbm",
-    "output_path": "gs://fraud-detection-jedha2024/shared_data/predictions/predictions_20250715.csv"
+    "output_path": "gs://fraud-detection-jedha2024/shared_data/predictions/predictions_20250721.csv"
   }'
 ```
 
@@ -172,6 +172,7 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/predict \
 
 ### 6. 📊 Monitoring (Data Drift)
 
+**Local:**
 ```bash
 curl -X POST http://localhost:8000/monitor \
   -H "Content-Type: application/json" \
@@ -181,6 +182,17 @@ curl -X POST http://localhost:8000/monitor \
     "output_html": "reports/data_drift.html"
   }'
 ```
+**Production:**
+```bash
+curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/monitor \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reference_path": "fraudTest.csv",
+    "current_path": "shared_data/tmp/raw_sample_20250721.csv",
+    "output_html": "reports/data_drift.html"
+  }'
+```
+ \
 
 * Réponse : résumé du drift, chemin du rapport HTML.
 

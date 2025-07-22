@@ -275,18 +275,44 @@ def monitor_drift(request: DriftRequest):
     shared_data_path = os.getenv("SHARED_DATA_PATH", "/app/shared_data")
     abs_path_html = os.path.join(shared_data_path, output_html_rel)
 
-    # Sauvegarde HTML
-    if not abs_path_html.startswith("gs://"):
-        os.makedirs(os.path.dirname(abs_path_html), exist_ok=True)
+    if abs_path_html.startswith("gs://"):
+        # Sauvegarde locale temporaire
+        tmp_html = "/tmp/data_drift.html"
+        report.save_html(tmp_html)
 
-    report.save_html(abs_path_html)
-    print(f"📄 Drift report saved to: {abs_path_html}")
+        # Upload vers GCS
+        fs = gcsfs.GCSFileSystem()
+        with fs.open(abs_path_html, "w") as f:
+            with open(tmp_html, "r") as local_f:
+                f.write(local_f.read())
+
+        print(f"📄 Drift report uploaded to GCS: {abs_path_html}")
+
+    else:
+        os.makedirs(os.path.dirname(abs_path_html), exist_ok=True)
+        report.save_html(abs_path_html)
+        print(f"📄 Drift report saved locally: {abs_path_html}")
+
 
     # Sauvegarder JSON
     json_path = abs_path_html.replace(".html", ".json")
     report_dict = report.as_dict()
-    with open(json_path, "w") as f:
-        json.dump(report_dict, f, indent=2)
+
+    if json_path.startswith("gs://"):
+        tmp_json = "/tmp/data_drift.json"
+        with open(tmp_json, "w") as f:
+            json.dump(report_dict, f, indent=2)
+
+        fs = gcsfs.GCSFileSystem()
+        with fs.open(json_path, "w") as f:
+            with open(tmp_json, "r") as tmpf:
+                f.write(tmpf.read())
+
+        print(f"📄 Drift JSON uploaded to GCS: {json_path}")
+    else:
+        with open(json_path, "w") as f:
+            json.dump(report_dict, f, indent=2)
+        print(f"📄 Drift JSON saved locally: {json_path}")
 
     # Extraire les résultats
     drift_summary = {}
