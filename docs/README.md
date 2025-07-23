@@ -6,12 +6,6 @@ This directory contains comprehensive documentation for the MLOps Fraud Detectio
 
 ### 🚀 Main Guides
 - **[`api-production-guide.md`](api-production-guide.md)** - Complete API guide with local and production examples
-- **[`model-api_endpoints.md`](model-api_endpoints.md)** - Detailed endpoint documentation
-- **[`quick-reference.md`](quick-reference.md)** - Quick reference for developers
-
-### 📸 Visual Documentation
-- **[`screenshots-needed.md`](screenshots-needed.md)** - List of required screenshots with capture instructions
-- **[`screenshots/`](screenshots/)** - Directory for terminal and UI screenshots
 
 ## 🎯 For Developers
 

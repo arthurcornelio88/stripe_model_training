@@ -1,29 +1,25 @@
-Voici une **refonte (refactor)** plus claire et concise de ton guide "API Production & Local Dev Guide", pour éviter les doublons et simplifier la navigation.
-J'ai conservé toutes les commandes essentielles, distingué net **local** et **cloud**, et recentré chaque bloc autour d’un workflow logique (prétraitement, entraînement, prédiction, etc).
-La structure « Table des matières / Workflows / Endpoints / Dépannage » est conservée, mais tout ce qui est en double est regroupé ou déplacé en ressources annexes.
-
----
 
 # 🚀 API Guide — Local & Production
 
-**Mise à jour : 17 juillet 2025**
+**Last update: July 17, 2025**
 
 ---
 
-## 📋 Table des matières
+## 📋 Table of Contents
 
-1. [Lancer les services](#lancer-les-services)
-2. [Workflows courants](#workflows-courants)
-3. [Endpoints & Exemples](#endpoints--exemples)
-4. [Monitoring et Debug](#monitoring-et-debug)
-5. [Dépannage](#dépannage)
-6. [Ressources utiles](#ressources-utiles)
+1. [Starting the Services](#1-starting-the-services)
+2. [Common Workflows](#2-common-workflows)
+3. [Endpoints & Examples](#3-endpoints--examples)
+4. [Monitoring & Debug](#4-monitoring--debug)
+5. [Troubleshooting](#5-troubleshooting)
+6. [Useful Resources](#6-useful-resources)
 
 ---
 
-## 1. Lancer les services
+## 1. Starting the Services
 
-### 🔹 En développement local
+
+### 🔹 Local Development
 
 ```bash
 docker compose up --build
@@ -33,16 +29,16 @@ docker compose up --build
 * **mlflow**: [http://localhost:5000](http://localhost:5000)
 * **mock-api**: [http://localhost:8001](http://localhost:8001)
 
-Accès rapide :
+Quick access:
 
-* Swagger (API docs) : [http://localhost:8000/docs](http://localhost:8000/docs)
-* MLflow UI : [http://localhost:5000](http://localhost:5000)
+* Swagger (API docs): [http://localhost:8000/docs](http://localhost:8000/docs)
+* MLflow UI: [http://localhost:5000](http://localhost:5000)
 
 ---
 
-### 🔹 En production (Cloud Run)
+### 🔹 In Production (Cloud Run)
 
-Les commandes curl restent identiques, il suffit de remplacer l’URL (voir tableau ci-dessous).
+The curl commands remain the same, just replace the URL (see table below).
 
 | Service      | Local                                          | Production Cloud Run                                                                                     |
 | ------------ | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
@@ -52,37 +48,73 @@ Les commandes curl restent identiques, il suffit de remplacer l’URL (voir tabl
 
 ---
 
-## 2. Workflows courants
 
-### 🔄 **Pipeline standard (dev & prod) :**
+## 2. Common Workflows
 
-1. **Vérifier la santé de l’API**
-2. **Prétraiter les données**
-3. **Entraîner un modèle**
-4. **Valider le modèle**
-5. **Faire des prédictions**
-6. **Monitorer le drift**
+### 🔄 **Standard Pipeline (dev & prod):**
 
-*(Remplacer les chemins locaux par des chemins GCS en prod)*
+0. **Health Check** 
+1. **Transactions**
+2. **Preprocess data**
+3. **Train a model**
+    - 3.1. **Fine-tune a model**
+    - 3.2. **Tracking experiments in the deployed MLflow Server**
+4. **Validate the model**
+5. **Make predictions**
+6. **Monitor drift**
+
+
 
 ---
 
-## 3. Endpoints & Exemples
-
-Tous les endpoints sont les mêmes pour local ou prod, seul l’URL change.
-
-### 1. 🏥 Health Check
+### 0. 🏥 Health Check
 
 ```bash
+# Model API
 curl http://localhost:8000/ping
-# ou en prod
-curl https://mlops-training-api-bxzifydblq-ew.a.run.app/ping
-# -> {"status": "alive"}
+# or in production
+curl https://mlops-training-api-bxzifydblq-ew.a.run.app/ping | jq
+
+# Mock API
+curl http://localhost:8001/ping
+# or in production
+curl https://mlops-mock-api-bxzifydblq-ew.a.run.app/ping | jq
+
+# MLflow API (UI health, returns HTML)
+curl http://localhost:5000
+# or in production
+curl https://mlops-mlflow-bxzifydblq-ew.a.run.app
 ```
+
+**What to expect in the GCP VM terminal:**
+
+<img src="img/prod_cloudrun_ping.png" alt="Ping in VM">
 
 ---
 
-### 2. 🔄 Prétraitement
+### 1. Transactions endpoint (Mock API)
+
+You can generate synthetic or real-like transactions using the mock API:
+
+```bash
+# Get 5 real transactions (variability=0)
+curl "http://localhost:8001/transactions?n=5&variability=0" | jq
+# or in production
+curl "https://mlops-mock-api-bxzifydblq-ew.a.run.app/transactions?n=5&variability=0" | jq
+
+# Get 10 synthetic transactions (variability=1)
+curl "http://localhost:8001/transactions?n=10&variability=1" | jq
+# or in production
+curl "https://mlops-mock-api-bxzifydblq-ew.a.run.app/transactions?n=10&variability=1" | jq
+```
+
+> You can set variability between 0 (real) and 1 (fully synthetic)
+
+**What to expect in the GCP VM terminal:**
+
+<img src="img/prod_cloudrun_preprocess.png" alt="Preprocess in VM">
+
+### 2. 🔄 Preprocessing
 
 **Local:**
 ```bash
@@ -92,9 +124,10 @@ curl -X POST http://localhost:8000/preprocess \
     "input_path": "/shared_data/fraudTest.csv",
     "output_dir": "/shared_data/preprocessed",
     "log_amt": true
-  }'
+  }' | jq
 ```
-**Production :**
+
+**Production:**
 
 - Preprocessed dataset for predictions:
 
@@ -105,10 +138,11 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/preprocess \
     "input_path": "gs://fraud-detection-jedha2024/shared_data/fraudTest.csv",
     "output_dir": "gs://fraud-detection-jedha2024/preprocessed",
     "log_amt": true
-  }'
+  }' | jq
 ```
 
-- Preprocessed dataset for full model training: 
+
+- Preprocessed dataset for full model training:
 
 ```bash
 curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/preprocess \
@@ -118,13 +152,16 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/preprocess \
     "output_dir": "gs://fraud-detection-jedha2024/preprocessed",
     "log_amt": true,
     "for_prediction": false
-  }'
+  }' | jq
 
 ```
 
+**What to expect in the GCP VM terminal:**
+
+<img src="img/prod_cloudrun_preprocess.png" alt="Preprocess in VM">
 ---
 
-### 3. 🤖 Entraînement
+### 3. 🤖 Training
 
 **Local:**
 ```bash
@@ -134,8 +171,9 @@ curl -X POST http://localhost:8000/train \
     "timestamp": "20250721_153507",
     "learning_rate": 0.1,
     "epochs": 50
-  }'
+  }' | jq
 ```
+
 **Production:**
 
 - Full training: 
@@ -147,12 +185,19 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/train \
     "timestamp": "20250722_100739",
     "learning_rate": 0.1,
     "epochs": 50
-  }'
+  }' | jq
 ```
-> "test": Defaut is `false`. If `true`, `X_raw` sample size - 5000 rows
-> "fast": Defaut is `false`. If `true`, training params configured to a fast training (bad metrics).
 
-- Fine tuning:
+> "test": Default is `false`. If `true`, `X_raw` sample size = 5000 rows
+> "fast": Default is `false`. If `true`, training params are set for fast training (worse metrics).
+
+
+**What to expect in the GCP VM terminal:**
+
+<img src="img/prod_cloudrun_train_cli.png" alt="Train in VM">
+
+
+#### **3.1 Fine tuning:**
 
 ```bash
 curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/train \
@@ -163,12 +208,47 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/train \
     "epochs": 50,
     "mode": "fine_tune",
     "timestamp_model_finetune": "20250722_102656"
-  }'
+  }' | jq
 ```
 
-> Takes the last model and fine-tunes it with your selected data. If you want to finetune an specific model, pick `timestamp_model_finetune` parameter.
 
-* Réponse : Métriques + chemin du modèle.
+> Takes the last model and fine-tunes it with your selected data. If you want to fine-tune a specific model, use the `timestamp_model_finetune` parameter.
+
+* Response: Metrics + model path.
+
+
+**What to expect in the GCP VM terminal:**
+
+<img src="img/prod_cloudrun_finetune_cli.png" alt="Fine-tuning in VM">
+
+---
+
+#### 3.2 Access MLflow UI:
+
+- Local: http://localhost:5000
+- Production: https://mlops-mlflow-bxzifydblq-ew.a.run.app
+
+**How to use the MLflow UI:**
+
+  1. Experiments Tab:
+      - See all experiments (e.g., "fraud_detection_experiment").
+      - Click on an experiment to see all runs.
+
+<img src="img/prod_mlflow_experiments.png" alt="Experiments in Mlflow deployed">
+
+  2. Runs Table:
+      - Each run corresponds to a training or fine-tuning job.
+      - Click a run to see parameters, metrics, and artifacts.
+
+<img src="img/prod_mlflow_run.png" alt="Run in Mlflow deployed">
+  
+  3. Artifacts Tab:
+      - Download model files, reports, and other outputs.
+      - The artifact storage backend is on GCP (see MLFLOW_TRACKING_URI in your environment).
+
+TODO <img src="img/prod_mlflow_run_2.png" alt="Artifacts in Mlflow deployed">
+
+> **Tip:** If you see a GCS path in the artifact location, it means your MLflow backend is using Google Cloud Storage for artifact persistence.
 
 ---
 
@@ -181,8 +261,9 @@ curl -X POST http://localhost:8000/validate \
   -d '{
     "model_name": "catboost_model_20250715_210730.cbm",
     "timestamp": "20250715_195232"
-  }'
+  }' | jq
 ```
+
 **Production:**
 ```bash
 curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/validate \
@@ -190,8 +271,12 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/validate \
   -d '{
     "model_name": "catboost_model_20250715_210730.cbm",
     "timestamp": "20250721_153507"
-  }'
+  }' | jq
 ```
+
+
+**What to expect in the GCP VM terminal:**
+<img src="img/prod_cloudrun_validate.png" alt="Validate in VM">
 
 ---
 
@@ -205,8 +290,9 @@ curl -X POST http://localhost:8000/predict \
     "input_path": "/shared_data/preprocessed/X_pred_20250715_195232.csv",
     "model_name": "catboost_model_20250715_210730.cbm",
     "output_path": "/shared_data/predictions/predictions_20250715.csv"
-  }'
+  }' | jq
 ```
+
 **Production:**
 ```bash
 curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/predict \
@@ -215,8 +301,13 @@ curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/predict \
     "input_path": "gs://fraud-detection-jedha2024/shared_data/preprocessed/X_pred_20250721_153507.csv",
     "model_name": "catboost_model_20250715_210730.cbm",
     "output_path": "gs://fraud-detection-jedha2024/shared_data/predictions/predictions_20250721.csv"
-  }'
+  }' | jq
 ```
+
+
+**What to expect in the GCP VM terminal:**
+
+<img src="img/prod_cloudrun_prediction.png" alt="Prediction in VM">
 
 ---
 
@@ -230,36 +321,38 @@ curl -X POST http://localhost:8000/monitor \
     "reference_path": "data/processed/X_test_20250715_195232.csv",
     "current_path": "data/processed/X_pred_20250715_195232.csv",
     "output_html": "reports/data_drift.html"
-  }'
+  }' | jq
 ```
+
 **Production:**
 ```bash
 curl -X POST https://mlops-training-api-bxzifydblq-ew.a.run.app/monitor \
   -H "Content-Type: application/json" \
   -d '{
-    "reference_path": "fraudTest.csv",
+    "reference_path": "shared_data/fraudTest.csv",
     "current_path": "shared_data/tmp/raw_sample_20250721.csv",
     "output_html": "reports/data_drift.html"
-  }'
+  }' | jq
 ```
- \
 
-* Réponse : résumé du drift, chemin du rapport HTML.
+
+* Response: drift summary, HTML report path.
+
+**What to expect in the GCP VM terminal:**
+<img src="img/prod_cloudrun_monitor_cli.png" alt="Monitor in VM">
 
 ---
 
-## 4. Monitoring et Debug
+## 4. Monitoring & Debug
 
-* **Swagger** :
+* **Swagger**:
+  * Local: [http://localhost:8000/docs](http://localhost:8000/docs)
+  * Prod: [https://mlops-training-api-bxzifydblq-ew.a.run.app/docs](https://mlops-training-api-bxzifydblq-ew.a.run.app/docs)
+* **MLflow UI**:
+  * Local: [http://localhost:5000](http://localhost:5000)
+  * Prod: [https://mlops-mlflow-bxzifydblq-ew.a.run.app](https://mlops-mlflow-bxzifydblq-ew.a.run.app)
 
-  * Local : [http://localhost:8000/docs](http://localhost:8000/docs)
-  * Prod : [https://mlops-training-api-bxzifydblq-ew.a.run.app/docs](https://mlops-training-api-bxzifydblq-ew.a.run.app/docs)
-* **MLflow UI** :
-
-  * Local : [http://localhost:5000](http://localhost:5000)
-  * Prod : [https://mlops-mlflow-bxzifydblq-ew.a.run.app](https://mlops-mlflow-bxzifydblq-ew.a.run.app)
-
-**Logs Cloud Run** :
+**Cloud Run Logs**:
 
 ```bash
 gcloud run services logs tail mlops-training-api --region=europe-west1
@@ -267,40 +360,12 @@ gcloud run services logs tail mlops-training-api --region=europe-west1
 
 ---
 
-## 5. Dépannage
+### **Practical Notes**
 
-### Problèmes fréquents
-
-* **Erreur 500** : vérifier les logs avec `gcloud run services logs read ...`
-* **Timeout training** : augmenter `--max-time` ou réduire `epochs`
-* **MLflow KO** : pinguer `/health` ou vérifier secrets GCP
-* **GCS inaccessible** : vérifier IAM du service account
-
-### Diagnostic rapide
-
-```bash
-curl -I https://mlops-training-api-bxzifydblq-ew.a.run.app/ping
-```
-
----
-
-## 6. Ressources utiles
-
-* [FastAPI](https://fastapi.tiangolo.com/)
-* [MLflow](https://mlflow.org/docs/latest/index.html)
-* [Google Cloud Run](https://cloud.google.com/run/docs)
-* [CatBoost](https://catboost.ai/docs/)
-
----
-
-### **Notes pratiques**
-
-* Les chemins :
-
-  * Local : `/app/shared_data/...` ou `data/processed/...`
-  * Prod : `gs://...`
-* Variables d’environnement : voir `.env` local et secrets GCP pour la prod
-* Authentification :
-
-  * Dev : fichiers de credentials à placer localement
-  * Prod : Cloud Run déployé en `--allow-unauthenticated` (à renforcer pour vrai prod)
+* Paths:
+  * Local: `/app/shared_data/...` or `data/processed/...`
+  * Prod: `gs://...`
+* Environment variables: see local `.env` and GCP secrets for production
+* Authentication:
+  * Dev: credential files must be placed locally
+  * Prod: Cloud Run is deployed with `--allow-unauthenticated` (should be hardened for real production)

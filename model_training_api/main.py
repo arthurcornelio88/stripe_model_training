@@ -21,7 +21,7 @@ from evidently.report import Report
 from evidently.metric_preset import DataDriftPreset
 
 # FastAPI app with metadata for docs
-api = FastAPI(
+app = FastAPI(
     title="My Automatic Fraud Detection API - Bloc B3 Certificate",
     description="Final project to obtain the RNCP 7 level in Architecte of AI, from Jedha (France)",
     version="1.0.1"
@@ -30,12 +30,12 @@ api = FastAPI(
 ENV = os.getenv("ENV", "DEV")
 
 
-@api.get("/", tags=["Health"])
+@app.get("/", tags=["Health"])
 def get_index():
     """Returns greetings"""
     return {"greetings": "welcome"}
 
-@api.get("/ping", tags=["Health"])
+@app.get("/ping", tags=["Health"])
 def ping():
     """Health check endpoint."""
     return {"status": "alive"}
@@ -48,7 +48,7 @@ class PreprocessRequest(BaseModel):
     log_amt: Optional[bool] = True
     for_prediction: Optional[bool] = True
 
-@api.post("/preprocess", tags=["Preprocessing"])
+@app.post("/preprocess", tags=["Preprocessing"])
 def preprocess_endpoint(request: PreprocessRequest):
     """Preprocesses a CSV file and saves the output to the specified directory."""
     timestamp = run_preprocessing(
@@ -66,7 +66,7 @@ class PreprocessDirectRequest(BaseModel):
     log_amt: Optional[bool] = True
     for_prediction: Optional[bool] = True
 
-@api.post("/preprocess_direct", tags=["Preprocessing"])
+@app.post("/preprocess_direct", tags=["Preprocessing"])
 def preprocess_direct(request: PreprocessDirectRequest):
     """Preprocesses data sent directly as JSON and saves the output."""
     df = pd.DataFrame(request.data).reset_index(drop=True)
@@ -126,7 +126,7 @@ class TrainRequest(BaseModel):
             raise ValueError(f"⛔ Le timestamp '{value}' n'est pas valide. Format attendu : YYYYmmdd_HHMMSS")
         return value
 
-@api.post("/train", tags=["Training"])
+@app.post("/train", tags=["Training"])
 def train_endpoint(request: TrainRequest):
     """Trains or fine-tunes the CatBoost model. Use mode='fine_tune' for incremental learning."""
     if request.mode == "fine_tune":
@@ -189,7 +189,7 @@ class ValidateRequest(BaseModel):
     validation_mode: Optional[str] = "historical"  # "historical" ou "production"
     production_data: Optional[Dict] = None  # Pour le mode production
 
-@api.post("/validate", tags=["Validation"])
+@app.post("/validate", tags=["Validation"])
 def validate_model_endpoint(request: ValidateRequest):
     """Validates a model on provided or historical data."""
     result = run_validation(
@@ -212,7 +212,7 @@ class PredictRequest(BaseModel):
     model_name: Optional[str] = "catboost_model.cbm"
     output_path: Optional[str] = get_storage_path("shared_data/predictions", "predictions.csv")
 
-@api.post("/predict", tags=["Prediction"])
+@app.post("/predict", tags=["Prediction"])
 def predict_endpoint(request: PredictRequest):
     """Runs batch prediction on the input data using the specified model."""
     print(f"📥 Predict input = {request.input_path}")
@@ -236,7 +236,7 @@ class DriftRequest(BaseModel):
     current_path: str
     output_html: Optional[str] = "reports/data_drift.html"
 
-@api.post("/monitor", tags=["Monitoring"])
+@app.post("/monitor", tags=["Monitoring"])
 def monitor_drift(request: DriftRequest):
     """Detects data drift between a reference and current dataset, saves a report, and returns drift summary."""
     import json
