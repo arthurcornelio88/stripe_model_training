@@ -4,93 +4,96 @@
 
 ## 📦 `model_training/` — ML API Service
 
-This repository contains all machine learning logic (preprocessing, training, batch inference, validation, drift monitoring) exposed via a unified FastAPI service.
+Contient toute la logique Machine Learning exposée via FastAPI :
 
-### 🔌 Exposed Endpoints (FastAPI)
+* preprocessing
+* entraînement & fine-tuning
+* batch prediction
+* validation
+* drift monitoring
 
-| Endpoint      | Method | Description                               |
-| ------------- | ------ | ----------------------------------------- |
-| `/ping`       | GET    | Liveness check                            |
-| `/preprocess` | POST   | Cleans and encodes a batch of raw data    |
-| `/train`      | POST   | Triggers model training                   |
-| `/validate`   | POST   | Evaluates model performance (on test set) |
-| `/predict`    | POST   | Performs batch inference                  |
-| `/monitor`    | POST   | Compares two datasets to detect drift     |
+### 🔌 FastAPI Endpoints
 
-➡️ Deployed as a container named `model-api` in `docker-compose`.
+| Endpoint      | Method | Description                     |
+| ------------- | ------ | ------------------------------- |
+| `/ping`       | GET    | Health check                    |
+| `/preprocess` | POST   | Preprocess raw transaction data |
+| `/train`      | POST   | Train or fine-tune a model      |
+| `/validate`   | POST   | Evaluate a trained model        |
+| `/predict`    | POST   | Run batch prediction            |
+| `/monitor`    | POST   | Detect dataset drift            |
+
+➡️ Déployé dans le conteneur `model-api` (Docker / Cloud Run).
 
 ---
 
 ## 📦 `mock_realtime_api/` — Synthetic Transaction Generator
 
-A second FastAPI service that generates realistic mock transactions, replicating the raw dataset structure.
+Expose une API FastAPI qui génère des transactions synthétiques similaires au dataset réel.
 
 ### 🔌 Endpoint
 
-| Endpoint        | Method | Description                                             |
-| --------------- | ------ | ------------------------------------------------------- |
-| `/transactions` | GET    | Returns a list of fake credit card transactions in JSON |
+| Endpoint        | Method | Description                      |
+| --------------- | ------ | -------------------------------- |
+| `/transactions` | GET    | Returns fake transactions (JSON) |
 
-➡️ Deployed as a container named `mock-api` in `docker-compose`.
+➡️ Déployé dans le conteneur `mock-api`.
 
 ---
 
 ## 📦 `dataops/` — Airflow Orchestration (separate repo)
 
-This repo manages the **data pipelines** (not ML logic). Contains:
+Ce dépôt gère l’orchestration des pipelines de données avec Apache Airflow.
 
-* `dags/` — ingestion, preprocessing, batch prediction, drift validation
-* `docker-compose-airflow.yml` — local orchestration setup
+* `dags/`: ingestion, preprocessing, prediction, drift monitoring
+* `docker-compose-airflow.yml`: setup local
 
-> Airflow never directly calls the ML code. It only interacts with the `model-api` via HTTP:
+> 💡 Airflow n'appelle jamais directement le code ML. Il utilise l’API HTTP exposée par `model-api`.
 
 ```python
-# Airflow DAG example
 requests.post("http://model-api:8000/predict", json={...})
 ```
 
 ---
 
-## 📂 Folder Breakdown in `model_training/`
+## 📁 Repo Breakdown — `model_training/`
 
 ```
 model_training/
-├── model_training_api/         ← FastAPI logic (main.py with all endpoints)
-│   └── main.py
-├── mock_realtime_api/          ← Mock transaction generator
-│   ├── main.py
-│   ├── Dockerfile
-│   └── requirements.txt
-├── src/                        ← Core ML modules
+├── model_training_api/       ← FastAPI backend (routes, utils)
+├── mock_realtime_api/        ← Fake transaction generator
+├── src/                      ← ML logic (training, preprocessing, etc.)
 │   ├── train.py
-│   ├── predict.py
 │   ├── validate_model.py
+│   ├── predict.py
 │   ├── preprocessing.py
-├── Dockerfile                  ← for model-api container
-├── docker-compose.yml          ← runs model-api + mock-api
-└── pyproject.toml / uv.lock    ← dependencies managed with `uv`
+├── Dockerfile                ← model-api container
+├── docker-compose.yml        ← runs model-api + mock-api
+└── pyproject.toml / uv.lock  ← dependencies
 ```
 
 ---
 
-## ⚙️ Dev vs Prod Behavior
+## ⚙️ DEV vs PROD Comparison
 
-| Component     | Development (Local)         | Production (Cloud / Orchestrated)           |
-| ------------- | --------------------------- | ------------------------------------------- |
-| Data Source   | Local `data/` folder        | GCS Bucket via `gcsfs`                      |
-| Model Storage | Saved to `models/` locally  | Stored as MLflow artifact in GCS            |
-| Ingestion     | Pulled from `mock-api`      | Comes from live system / webhook            |
-| Preprocessing | Triggered via `/preprocess` | Automated in Airflow pipeline               |
-| Training      | Via CLI or `/train`         | Triggered via API (possibly retraining DAG) |
-| Prediction    | `/predict` with local model | `/predict` using model from GCS + MLflow    |
+| Feature        | DEV Mode                 | PROD Mode (Cloud)                       |
+| -------------- | ------------------------ | --------------------------------------- |
+| Data Source    | Local `/app/shared_data` | GCS Bucket (via `gcsfs`)                |
+| Model Storage  | Local `models/`          | GCS + MLflow Artifacts                  |
+| Triggering     | Manual (CLI or curl)     | Triggered via API calls or Airflow DAGs |
+| Prediction     | Model from local folder  | Model loaded via MLflow + GCS           |
+| Authentication | Local credentials file   | IAM & GCP service accounts              |
 
 ---
 
-## ✅ Recap
+## ✅ System Recap
 
-| Component             | Role                                 |
-| --------------------- | ------------------------------------ |
-| `model-api` container | Hosts all ML logic + endpoints       |
-| `mock-api` container  | Simulates real-time fraud data       |
-| `dataops` + Airflow   | Pipeline orchestration (external)    |
-| FastAPI everywhere    | Makes it testable, scalable, unified |
+| Component   | Role                                  |
+| ----------- | ------------------------------------- |
+| `model-api` | Expose ML endpoints (FastAPI)         |
+| `mock-api`  | Generate fake transactions            |
+| `mlflow`    | Track experiments and store artifacts |
+| `dataops`   | Orchestrate pipeline via DAGs         |
+| FastAPI     | Enables unified, testable interfaces  |
+
+---

@@ -561,133 +561,59 @@ def run_fine_tuning(
     epochs: int = 10
 ):
     """
-    Run fine-tuning on an existing model with preprocessed data.
-    
-    Le DAG s'occupe de :
-    - Récupérer les données BigQuery
-    - Les preprocesser avec /preprocess_direct
-    
-    L'API s'occupe de :
-    - Charger les données déjà preprocessées
-    - Faire le fine-tuning
+    Fine-tune a previously trained model with fresh preprocessed data.
     """
-
-    """Fine-tuning avec MLflow tracking"""
     start_time = time.time()
-
     print(f"🧠 Starting fine-tuning for model: {model_name}")
     print(f"🔍 Using preprocessed data with timestamp: {timestamp}")
-    print(f"💾 Expected files will be: X_train_{timestamp}.csv, X_test_{timestamp}.csv, etc.")
-    
-    # Charger les données préprocessées (déjà préparées par le DAG)
-    X_train, X_test, y_train, y_test = load_data(timestamp=timestamp, test_mode=False)
-    
-    print(f"� Loaded preprocessed data: X_train {X_train.shape}, X_test {X_test.shape}")
-    print(f"🔍 Columns: {list(X_train.columns[:5])}..." if len(X_train.columns) > 5 else f"🔍 Columns: {list(X_train.columns)}")
-    
-    # Vérifier la distribution des classes dans les données d'entraînement
+
+    # 1. Load data
+    X_train, X_test, y_train, y_test = load_data(timestamp=timestamp)
     fraud_count = y_train.sum()
-    total_count = len(y_train)
-    fraud_ratio = fraud_count / total_count
-    
-    print(f"📊 Training data distribution:")
-    print(f"    Total samples: {total_count}")
-    print(f"    Fraud samples: {fraud_count}")
-    print(f"    Fraud ratio: {fraud_ratio:.4f}")
-    
-    # Vérifier si on a assez de données pour fine-tuning
+    print(f"📊 Preprocessed samples: {len(X_train)} | Fraud count: {fraud_count}")
+
     if fraud_count < 2:
-        raise ValueError(f"❌ Insufficient fraud samples for fine-tuning: {fraud_count}. Need at least 2.")
-    
-    # Échantillonnage stratifié pour préserver les classes
-    
-    # Prendre au maximum 2000 échantillons, mais garder au moins 5 fraudes si possible
+        raise ValueError("❌ Not enough fraud examples for fine-tuning (need at least 2).")
+
+    # 2. Stratified sampling
     max_samples = min(2000, len(X_train))
-    min_fraud_samples = min(5, fraud_count)  # Garder au moins 5 fraudes ou tout ce qu'on a
-    
-    if fraud_count <= min_fraud_samples:
-        # Si on a très peu de fraudes, on les prend toutes
-        fraud_indices = y_train[y_train == 1].index
-        non_fraud_indices = y_train[y_train == 0].index
-        
-        # Prendre toutes les fraudes + échantillon de non-fraudes
-        remaining_samples = max_samples - len(fraud_indices)
-        if remaining_samples > 0 and len(non_fraud_indices) > 0:
-            selected_non_fraud = non_fraud_indices.to_series().sample(n=min(remaining_samples, len(non_fraud_indices)), random_state=42)
-            selected_indices = fraud_indices.union(selected_non_fraud)
-        else:
-            selected_indices = fraud_indices
+    if fraud_count <= 5:
+        fraud_idx = y_train[y_train == 1].index
+        non_fraud_idx = y_train[y_train == 0].index
+        selected_idx = fraud_idx.union(
+            non_fraud_idx.to_series().sample(n=min(max_samples - len(fraud_idx), len(non_fraud_idx)), random_state=42)
+        ) if len(non_fraud_idx) else fraud_idx
     else:
-        # Échantillonnage stratifié normal
-        X_train_sample, _, y_train_sample, _ = train_test_split(
-            X_train, y_train,
-            train_size=max_samples,
-            stratify=y_train,
-            random_state=42
+        X_sampled, _, y_sampled, _ = train_test_split(
+            X_train, y_train, train_size=max_samples, stratify=y_train, random_state=42
         )
-        selected_indices = X_train_sample.index
-    
-    X_train_sample = X_train.loc[selected_indices]
-    y_train_sample = y_train.loc[selected_indices]
-    
-    final_fraud_count = y_train_sample.sum()
-    final_total = len(y_train_sample)
-    final_fraud_ratio = final_fraud_count / final_total
-    
-    print(f"📊 Fine-tuning sample:")
-    print(f"    Total samples: {final_total}")
-    print(f"    Fraud samples: {final_fraud_count}")
-    print(f"    Fraud ratio: {final_fraud_ratio:.4f}")
-    
-    if final_fraud_count < 1:
-        raise ValueError(f"❌ No fraud samples in fine-tuning data after sampling!")
-    
-    # 🔍 DEBUG: Vérifier les colonnes avant fine-tuning
-    # print(f"🔍 DEBUG X_train_sample columns before fine-tuning: {list(X_train_sample.columns)}")
-    # print(f"🔍 DEBUG X_test columns before fine-tuning: {list(X_test.columns)}")
-    # print(f"🔍 DEBUG X_train_sample dtypes: {X_train_sample.dtypes.to_dict()}")
-    
+        selected_idx = X_sampled.index
+
+    X_train_sample = X_train.loc[selected_idx]
+    y_train_sample = y_train.loc[selected_idx]
+
+    # 3. Resolve model to fine-tune
     if timestamp_model_finetune in [None, "", "latest"]:
-        print("🔄 Resolving latest model file for fine-tuning")
+        print("🔄 Resolving latest model file...")
         if ENV == "PROD":
             fs = gcsfs.GCSFileSystem()
-            pattern = f"{GCS_BUCKET}/models/catboost_model_*.cbm"  # sans gs://
-            matches = fs.glob(pattern)
-            if not matches:
-                raise FileNotFoundError(f"❌ No model file matching: gs://{pattern}")
-            matches.sort(reverse=True)
-            existing_model_path = f"gs://{matches[0]}"
-            print(f"✅ Found latest model: {existing_model_path}")
+            models = fs.glob(f"{GCS_BUCKET}/models/catboost_model_*.cbm")
+            if not models:
+                raise FileNotFoundError("❌ No models found in GCS for fine-tuning.")
+            models.sort(reverse=True)
+            existing_model_path = f"gs://{models[0]}"
         else:
-            # En DEV, chercher localement
-            local_dir = os.path.join(SHARED_DATA_PATH, "models")
-            files = glob.glob(os.path.join(local_dir, "catboost_model_*.cbm"))
-            if not files:
-                raise FileNotFoundError(f"❌ No local models found in {local_dir}")
-            files.sort(reverse=True)
-            existing_model_path = files[0]
-            print(f"✅ Found latest local model: {existing_model_path}")
+            local_models = glob.glob(os.path.join(SHARED_DATA_PATH, "models", "catboost_model_*.cbm"))
+            if not local_models:
+                raise FileNotFoundError("❌ No local models found for fine-tuning.")
+            local_models.sort(reverse=True)
+            existing_model_path = local_models[0]
     else:
         existing_model_path = resolve_path(model_name, "models", timestamp_model_finetune)
 
+    print(f"✅ Using model for fine-tune: {existing_model_path}")
 
-    # Chemin du modèle existant
-    if ENV == "PROD":
-        existing_model_path = resolve_path(model_name, "models", timestamp_model_finetune)
-    else:
-        # 🔧 Chercher d'abord dans shared_data (où sont sauvegardés les nouveaux modèles)
-        shared_model_path = os.path.join("/app/shared_data", model_name)
-        models_model_path = os.path.join("models", model_name)
-        
-        if os.path.exists(shared_model_path):
-            existing_model_path = shared_model_path
-            print(f"🔍 Using model from shared_data: {existing_model_path}")
-        elif os.path.exists(models_model_path):
-            existing_model_path = models_model_path
-            print(f"🔍 Using model from models/: {existing_model_path}")
-        else:
-            raise FileNotFoundError(f"❌ Model not found in either {shared_model_path} or {models_model_path}")
-    
+    # 4. Download model if needed
     if existing_model_path.startswith("gs://"):
         fs = gcsfs.GCSFileSystem()
         if not fs.exists(existing_model_path):
@@ -697,19 +623,13 @@ def run_fine_tuning(
         if not os.path.exists(existing_model_path):
             raise FileNotFoundError(f"❌ Model not found: {existing_model_path}")
         local_model_path = existing_model_path
-    
-    print(f"✅ Found existing model at: {existing_model_path}")
-    
-    # print(f"🔍 DEBUG: Model expects features: {model_features}")
-    # print(f"🔍 DEBUG: Data has features: {list(X_train_sample.columns)}")
-    
-    # Safety: close any active MLflow run before starting a new one
-    if mlflow.active_run() is not None:
-        print("⚠️ Found active MLflow run, closing it before starting a new one.")
+
+    # 5. MLflow run
+    if mlflow.active_run():
         mlflow.end_run()
+
     with mlflow.start_run():
-        # Parameters à logger
-        params = {
+        mlflow.log_params({
             "learning_rate": learning_rate,
             "epochs": epochs,
             "model_name": model_name,
@@ -717,50 +637,35 @@ def run_fine_tuning(
             "training_samples": len(X_train_sample),
             "fraud_ratio": float(y_train_sample.mean()),
             "environment": ENV
+        })
+
+        # Fine-tune
+        model = fine_tune_model(
+            existing_model_path=local_model_path,
+            X_train=X_train_sample,
+            y_train=y_train_sample,
+            X_val=X_test,
+            y_val=y_test,
+            learning_rate=learning_rate,
+            epochs=epochs
+        )
+
+        report, auc = evaluate_model(model, X_test, y_test)
+        model_path = save_model(model, model_name=model_name)
+
+        metrics = {
+            "roc_auc": auc,
+            "precision": report["1"]["precision"],
+            "recall": report["1"]["recall"],
+            "f1": report["1"]["f1-score"],
+            "training_time": time.time() - start_time
         }
-        mlflow.log_params(params)
-    
-    # Fine-tuning
-    model = fine_tune_model(
-        existing_model_path=local_model_path,
-        X_train=X_train_sample,
-        y_train=y_train_sample,
-        X_val=X_test,
-        y_val=y_test,
-        learning_rate=learning_rate,
-        epochs=epochs
-    )
-    
-    # Évaluation
-    report, auc = evaluate_model(model, X_test, y_test)
-    
-    # Sauvegarde du modèle fine-tuné
-    model_path = save_model(model, model_name=model_name)
-    
-    metrics = {
-        "roc_auc": auc,
-        "precision": report["1"]["precision"],
-        "recall": report["1"]["recall"],
-        "f1": report["1"]["f1-score"],
-        "training_time": time.time() - start_time
-    }
 
-    # Log model dans MLflow
-    mlflow.catboost.log_model(
-        model,
-        "model",
-        registered_model_name="fraud-detection-model"
-    )
+        mlflow.log_metrics(metrics)
+        mlflow.catboost.log_model(model, "model", registered_model_name="fraud-detection-model")
+        run_id = mlflow.active_run().info.run_id
 
-    run_id = mlflow.active_run().info.run_id
-    print(f"📊 MLflow Run ID: {run_id}")
-
-    print(f"✅ Fine-tuning complete!")
-    print(f"🔍 DEBUG: model_path in response: {model_path}")
-    print(f"📊 New AUC: {auc:.4f} | F1: {metrics['f1']:.4f}")
-
-    # Ensure MLflow run is closed
-    mlflow.end_run()
+    print(f"✅ Fine-tuning complete — AUC: {auc:.4f} | model saved to: {model_path}")
 
     return {
         "auc": auc,
