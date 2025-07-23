@@ -4,6 +4,9 @@ FROM python:3.11-slim
 # Set working directory inside container
 WORKDIR /app
 
+# ✅ Étape 0 : Installer Git (nécessaire pour MLflow)
+RUN apt-get update && apt-get install -y git
+
 # Étape 1 : Copier uniquement requirements.txt pour permettre le cache pip
 COPY requirements.txt .
 
