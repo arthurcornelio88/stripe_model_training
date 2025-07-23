@@ -94,12 +94,19 @@ def preprocess_direct(request: PreprocessDirectRequest):
     if ENV != "PROD":
         os.makedirs(output_dir, exist_ok=True)
 
-    timestamp = run_preprocessing(
-        input_path=tmp_input,
-        output_dir=output_dir,
-        log_amt=request.log_amt,
-        for_prediction=request.for_prediction
-    )
+    try:
+        timestamp = run_preprocessing(
+            input_path=tmp_input,
+            output_dir=output_dir,
+            log_amt=request.log_amt,
+            for_prediction=request.for_prediction
+        )
+    except ValueError as e:
+        # ✅ Catch class imbalance errors (e.g. stratify fails)
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        # ✅ Fallback for unexpected failures
+        raise HTTPException(status_code=500, detail=f"Preprocessing failed: {str(e)}")
 
     return {"status": "done", "timestamp": timestamp}
 

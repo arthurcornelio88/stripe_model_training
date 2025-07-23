@@ -97,6 +97,13 @@ def encode_and_split(df: pd.DataFrame, output_dir: str, test_size=0.2, random_st
     y = df["is_fraud"]
     X = df.drop(columns=["is_fraud"])
 
+    # ✅ Sanity check for class distribution
+    class_counts = y.value_counts().to_dict()
+    if len(class_counts) < 2 or any(v < 2 for v in class_counts.values()):
+        raise ValueError(
+            f"⛔ Not enough examples in each class for stratified split. Class distribution: {class_counts}"
+        )
+
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, stratify=y, random_state=random_state
     )
