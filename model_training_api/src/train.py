@@ -645,6 +645,18 @@ def run_fine_tuning(
     # print(f"🔍 DEBUG X_test columns before fine-tuning: {list(X_test.columns)}")
     # print(f"🔍 DEBUG X_train_sample dtypes: {X_train_sample.dtypes.to_dict()}")
     
+    if timestamp_model_finetune in [None, "", "latest"]:
+        print("🔄 Resolving latest model file for fine-tuning")
+        pattern = get_storage_path("models", model_name.replace(".cbm", "_*.cbm"))
+        fs = gcsfs.GCSFileSystem()
+        matches = fs.glob(pattern)
+        if not matches:
+            raise FileNotFoundError(f"❌ No model file matching pattern: {pattern}")
+        matches.sort(reverse=True)
+        existing_model_path = matches[0]
+    else:
+        existing_model_path = resolve_path(model_name, "models", timestamp_model_finetune)
+
     # Chemin du modèle existant
     if ENV == "PROD":
         existing_model_path = resolve_path(model_name, "models", timestamp_model_finetune)
