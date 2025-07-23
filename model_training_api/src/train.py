@@ -649,15 +649,27 @@ def run_fine_tuning(
     
     if timestamp_model_finetune in [None, "", "latest"]:
         print("🔄 Resolving latest model file for fine-tuning")
-        pattern = get_storage_path("models", model_name.replace(".cbm", "_*.cbm"))
-        fs = gcsfs.GCSFileSystem()
-        matches = fs.glob(pattern)
-        if not matches:
-            raise FileNotFoundError(f"❌ No model file matching pattern: {pattern}")
-        matches.sort(reverse=True)
-        existing_model_path = matches[0]
+        if ENV == "PROD":
+            fs = gcsfs.GCSFileSystem()
+            pattern = f"{GCS_BUCKET}/models/catboost_model_*.cbm"  # sans gs://
+            matches = fs.glob(pattern)
+            if not matches:
+                raise FileNotFoundError(f"❌ No model file matching: gs://{pattern}")
+            matches.sort(reverse=True)
+            existing_model_path = f"gs://{matches[0]}"
+            print(f"✅ Found latest model: {existing_model_path}")
+        else:
+            # En DEV, chercher localement
+            local_dir = os.path.join(SHARED_DATA_PATH, "models")
+            files = glob.glob(os.path.join(local_dir, "catboost_model_*.cbm"))
+            if not files:
+                raise FileNotFoundError(f"❌ No local models found in {local_dir}")
+            files.sort(reverse=True)
+            existing_model_path = files[0]
+            print(f"✅ Found latest local model: {existing_model_path}")
     else:
         existing_model_path = resolve_path(model_name, "models", timestamp_model_finetune)
+
 
     # Chemin du modèle existant
     if ENV == "PROD":

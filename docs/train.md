@@ -1,34 +1,34 @@
+
 # 🧠 `train.py` — CatBoost Fraud Detection Trainer
 
-This script trains a **CatBoostClassifier** on preprocessed fraud detection data, using environment-aware logic to handle:
-
-* Local (DEV) or Cloud (PROD) data access
-* Versioned datasets via timestamped CSVs
-* Fast prototyping (`--test`)
-* Full MLflow experiment tracking
+This script trains a **CatBoostClassifier** on preprocessed data to detect fraud. It is designed to work both locally (DEV) and in production (PROD) with full support for **versioning, MLflow, and GCS**.
 
 ---
 
-## ✅ Before Running the Script
 
-To track training runs and manage model versions, **MLflow** must be properly configured depending on your environment:
+## 🧰 Main Features
 
-### 🔧 DEV Mode
+✅ Automatic environment management (local or GCP)
+✅ Loading of versioned data by timestamp
+✅ 3 training modes (`full`, `--fast`, `--test`)
+✅ Full logging in **MLflow** (params, metrics, artifacts)
+✅ Model registration in the **MLflow Registry**
 
-Ensure your `.env` file includes:
+---
+
+
+## ⚙️ Prerequisites
+
+### Local (`ENV=DEV`)
+
+Minimal required `.env`:
 
 ```env
 ENV=DEV
 MLFLOW_TRACKING_URI=http://localhost:5000
 ```
 
-This will:
-
-* Track experiments locally at `http://localhost:5000`
-* Save artifacts to the local `mlruns/` folder
-* Store trained models in `models/`
-
-To spin up a local MLflow server:
+Start the local MLflow server:
 
 ```bash
 mlflow server \
@@ -39,11 +39,9 @@ mlflow server \
   --serve-artifacts
 ```
 
----
+### Production (`ENV=PROD`)
 
-### ☁️ PROD Mode
-
-In production, data and models are stored in Google Cloud Storage and tracked on a remote MLflow server. Set your `.env` like this:
+Production `.env` (secrets must exist on GCP):
 
 ```env
 ENV=PROD
@@ -52,125 +50,101 @@ GCP_DATA_PREFIX=data/fraud-detection
 MLFLOW_TRACKING_URI=https://mlflow.mycompany.com
 ```
 
-This will:
-
-* Load input datasets from `gs://my-bucket-name/data/fraud-detection/processed/`
-* Save models to `gs://my-bucket-name/models/`
-* Track MLflow runs at the provided remote URI
-
-> ⚠️ Make sure your environment has the right permissions (e.g. Google service account credentials via `GOOGLE_APPLICATION_CREDENTIALS`).
+Make sure the GCP service has the correct permissions (`GOOGLE_APPLICATION_CREDENTIALS` configured).
 
 ---
 
-## 🚀 Usage
+
+## 🚀 Launch a Training Run
 
 ```bash
-python src/train.py [options]
+python src/train.py [OPTIONS]
 ```
 
-### Available CLI options:
+### Available Options:
 
-| Option            | Description                                                    | Default                  |
-| ----------------- | -------------------------------------------------------------- | ------------------------ |
-| `--iterations`    | Number of boosting rounds                                      | `500`                    |
-| `--learning_rate` | Learning rate for CatBoost                                     | `0.05`                   |
-| `--depth`         | Tree depth                                                     | `6`                      |
-| `--model_name`    | Name of the output model file                                  | `catboost_model.cbm`     |
-| `--timestamp`     | Use a specific timestamped dataset (format: `YYYYmmdd_HHMMSS`) | *(use latest available)* |
-| `--test`          | Enable fast training mode with minimal config                  | `False`                  |
-| `--fast`          | Run in fast dev mode (not full test, not full prod)            | `False`                  |
+| Option            | Description                                   | Default              |
+| ----------------- | --------------------------------------------- | -------------------- |
+| `--iterations`    | Number of CatBoost iterations                 | `500`                |
+| `--learning_rate` | Learning rate                                 | `0.05`               |
+| `--depth`         | Maximum tree depth                            | `6`                  |
+| `--model_name`    | Output model filename                         | `catboost_model.cbm` |
+| `--timestamp`     | Use a specific data version                   | *(most recent)*      |
+| `--test`          | Fast test mode (10 iterations)                | `False`              |
+| `--fast`          | Fast dev mode (fewer iterations than prod)    | `False`              |
 
 ---
 
-## 🛠️ Behavior by Environment
 
-The script adapts based on `ENV` defined in your `.env` file:
+## ⚡ Training Modes
 
-### 🔧 DEV Mode (`ENV=DEV`)
-
-* Loads CSVs from `data/processed/X_train_<timestamp>.csv` (or latest version)
-* Saves model locally in `models/`
-* Uses local MLflow tracking URI
-
-```env
-ENV=DEV
-MLFLOW_TRACKING_URI=http://localhost:5000
-```
-
-### ☁️ PROD Mode (`ENV=PROD`)
-
-* Reads datasets from Google Cloud Storage bucket
-* Logs experiment to remote MLflow server
-* Saves model in `gs://<bucket>/models/`
-
-```env
-ENV=PROD
-GCP_BUCKET=my-bucket-name
-GCP_DATA_PREFIX=data/fraud-detection
-MLFLOW_TRACKING_URI=https://mlflow.mycompany.com
-```
+| Mode | Command        | Purpose                            | Simplified Config |
+| ---- | -------------- | ---------------------------------- | ----------------- |
+| PROD | *(default)*    | Best performance, full logging     | ❌                 |
+| FAST | `--fast`       | Fewer iterations, quick logging    | ✅                 |
+| TEST | `--test`       | Ultra-fast for pipeline validation | ✅                 |
 
 ---
 
-## ⚡ Fast Training Mode
 
-Use the `--test` flag to quickly validate the pipeline with minimal config:
+## 🧪 Examples
 
-```bash
-python train.py --test
-```
-
-Uses:
-
-```python
-iterations = 10
-learning_rate = 0.1
-depth = 3
-class_weights = [1, 10]
-```
-
----
-
-## 🧪 Example Runs
-
-Train latest version:
+Train with the most recent data:
 
 ```bash
 python train.py
 ```
 
-Train specific version:
+Train with a specific data version:
 
 ```bash
-python train.py --timestamp 20240611_1542
+python train.py --timestamp 20240721_1800
 ```
 
-Train with custom model name:
+Fast mode:
 
 ```bash
-python train.py --model_name fraud_v1.cbm
+python train.py --fast
 ```
 
-Train in test mode:
+Test mode:
 
 ```bash
 python train.py --test
 ```
 
----
+Custom model name:
 
-## 📁 Output
-
-| Artifact       | Destination                               |
-| -------------- | ----------------------------------------- |
-| Trained Model  | `models/<model_name>.cbm` (or GCS bucket) |
-| MLflow Logs    | Tracked at `MLFLOW_TRACKING_URI`          |
-| Dataset Inputs | Loaded from local or GCS (preprocessed)   |
+```bash
+python train.py --model_name catboost_fraud_v1.cbm
+```
 
 ---
 
-## 🧩 Next Steps
 
-* Add API serving: `serve.py`
-* Automate version tagging
-* Upload evaluation report to MLflow artifacts
+## 📤 Generated Artifacts
+
+| Type                   | Location                                                   |
+| ---------------------- | ---------------------------------------------------------- |
+| Trained model          | `models/<model_name>.cbm` (or GCS bucket if `ENV=PROD`)    |
+| Training logs          | MLflow (`params`, `metrics`, `artifacts`, `model`)         |
+| Classification report  | `reports/classification_report.json` + `.html` in MLflow   |
+| Model registration     | MLflow Registry (`CatBoostFraudDetector`)                  |
+
+---
+
+
+## 🧠 What the Script Does
+
+1. 🔍 Loads preprocessed datasets (by timestamp or latest available)
+2. 🏋️ Trains a `CatBoostClassifier` (config depends on mode)
+3. 📈 Evaluates the model (`AUC`, `F1`, etc.)
+4. 📝 Logs to MLflow:
+
+   * Hyperparameters
+   * Metrics
+   * HTML/JSON report
+   * Model (MLflow + Registry)
+5. 💾 Saves the model locally or to GCS
+
+---
