@@ -624,11 +624,16 @@ def run_fine_tuning(
             raise FileNotFoundError(f"❌ Model not found: {existing_model_path}")
         local_model_path = existing_model_path
 
-    # 5. MLflow run
+    # 5. MLflow run (robust, no hardcoded experiment_id)
     if mlflow.active_run():
+        print("⚠️ Found active MLflow run. Ending it before continuing.")
         mlflow.end_run()
 
-    with mlflow.start_run():
+    print(f"🔄 Checking or creating MLflow experiment: {EXPERIMENT}")
+    mlflow.set_tracking_uri(MLFLOW_URI)
+    mlflow.set_experiment(EXPERIMENT)
+
+    with mlflow.start_run() as run:
         mlflow.log_params({
             "learning_rate": learning_rate,
             "epochs": epochs,
@@ -639,7 +644,6 @@ def run_fine_tuning(
             "environment": ENV
         })
 
-        # Fine-tune
         model = fine_tune_model(
             existing_model_path=local_model_path,
             X_train=X_train_sample,
@@ -663,7 +667,9 @@ def run_fine_tuning(
 
         mlflow.log_metrics(metrics)
         mlflow.catboost.log_model(model, "model", registered_model_name="fraud-detection-model")
-        run_id = mlflow.active_run().info.run_id
+
+        run_id = run.info.run_id  # ✅ Safe and clean
+
 
     print(f"✅ Fine-tuning complete — AUC: {auc:.4f} | model saved to: {model_path}")
 
