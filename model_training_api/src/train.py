@@ -143,9 +143,11 @@ def resolve_path(name, io="input", timestamp=None):
             return get_storage_path("shared_data", filename)
     else:
         # Find latest file in preprocessed dir
-        pattern = get_storage_path("shared_data/preprocessed", name.replace(".csv", "_*.csv"))
+        if name.endswith(".cbm"):
+            pattern = get_storage_path("models", name.replace(".cbm", "_*.cbm"))
+        else:
+            pattern = get_storage_path("shared_data/preprocessed", name.replace(".csv", "_*.csv"))
         return get_latest_file(pattern)
-
 
 def load_data(timestamp=None, test_mode=False, sample_size=5000):
     """
