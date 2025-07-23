@@ -6,7 +6,12 @@
 # 1. Ensure you're in the right directory
 cd model_training/deployment/
 
-# 2. Run the deployment script (builds from ../Dockerfile)
+# 2. Add policies for containers have access to secrets
+gcloud projects add-iam-policy-binding jedha2024 \
+  --member="serviceAccount:168643410075-compute@developer.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+
+# 3. Run the deployment script (builds from ../Dockerfile)
 ./deploy_all_services.sh
 ```
 

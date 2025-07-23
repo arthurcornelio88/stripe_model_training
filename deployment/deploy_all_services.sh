@@ -94,9 +94,14 @@ gcloud run deploy mlops-mlflow \
   --allow-unauthenticated \
   --set-env-vars ENV=PROD,SERVICE_TYPE=mlflow \
   --set-env-vars GOOGLE_CLOUD_PROJECT=${PROJECT_ID} \
+  --set-env-vars BACKEND_STORE_URI=gs://${GCS_BUCKET}/mlflow-artifacts \
+  --set-env-vars ARTIFACT_ROOT=gs://${GCS_BUCKET}/models \
   --memory 1Gi \
   --cpu 1 \
   --port 5000
+
+echo "🧠 MLflow backend: gs://${GCS_BUCKET}/mlflow-artifacts"
+echo "📦 MLflow artifacts: gs://${GCS_BUCKET}/models"
 
 echo "✅ All services deployed successfully!"
 
