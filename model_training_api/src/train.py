@@ -576,7 +576,8 @@ def run_fine_tuning(
         raise ValueError("❌ Not enough fraud examples for fine-tuning (need at least 2).")
 
     # 2. Stratified sampling
-    max_samples = min(2000, len(X_train))
+    #max_samples = min(2000, len(X_train))
+    max_samples = int(0.95 * len(X_train))  # max 95% pour le train
     if fraud_count <= 5:
         fraud_idx = y_train[y_train == 1].index
         non_fraud_idx = y_train[y_train == 0].index
