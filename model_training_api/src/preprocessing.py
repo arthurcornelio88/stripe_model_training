@@ -5,6 +5,7 @@ from category_encoders import TargetEncoder
 from dotenv import load_dotenv
 import argparse
 import os
+from model_training_api.utils.storage_path import get_storage_path
 from datetime import datetime
 
 # Load environment variables
@@ -12,11 +13,15 @@ load_dotenv()
 
 ENV = os.getenv("ENV", "DEV")
 BUCKET = os.getenv("GCP_BUCKET")
-PREFIX = os.getenv("GCP_DATA_PREFIX")
+SHARED_DATA_PATH = os.getenv("SHARED_DATA_PATH")
 
 
-def gcs_path(filename):
-    return f"gs://{BUCKET}/{PREFIX}/{filename}"
+def resolve_base_path(relative_path):
+    """Resolve file path based on environment"""
+    if ENV == "PROD":
+        return f"gs://{BUCKET}/{SHARED_DATA_PATH}/{relative_path}"
+    else:
+        return f"/app/shared_data/{relative_path}"
 
 
 def resolve_path(filename, io="input"):
@@ -24,10 +29,10 @@ def resolve_path(filename, io="input"):
     Resolves the correct path based on ENV.
 
     DEV: local path (data/raw or data/processed)
-    PROD: GCS path using GCP_BUCKET and GCP_DATA_PREFIX
+    PROD: GCS path using GCP_BUCKET and SHARED_DATA_PATH
     """
     sub = "raw/" if io == "input" else "processed/"
-    return gcs_path(f"{sub}{filename}") if ENV == "PROD" else os.path.join(f"data/{sub}", filename)
+    return resolve_base_path(f"{sub}{filename}") if ENV == "PROD" else os.path.join(f"data/{sub}", filename)
 
 
 def haversine_distance(lat1, lon1, lat2, lon2):
@@ -92,6 +97,13 @@ def encode_and_split(df: pd.DataFrame, output_dir: str, test_size=0.2, random_st
     y = df["is_fraud"]
     X = df.drop(columns=["is_fraud"])
 
+    # ✅ Sanity check for class distribution
+    class_counts = y.value_counts().to_dict()
+    if len(class_counts) < 2 or any(v < 2 for v in class_counts.values()):
+        raise ValueError(
+            f"⛔ Not enough examples in each class for stratified split. Class distribution: {class_counts}"
+        )
+
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, stratify=y, random_state=random_state
     )
@@ -119,7 +131,7 @@ def encode_and_split(df: pd.DataFrame, output_dir: str, test_size=0.2, random_st
         "y_test": y_test
     }.items():
         data = data.reset_index(drop=True)
-        filename = os.path.join(output_dir, f"{name}_{timestamp}.csv")
+        filename = get_storage_path("shared_data/preprocessed", f"{name}_{timestamp}.csv")
         print(f"🔍 DEBUG Saving {name} with columns: {list(data.columns) if hasattr(data, 'columns') else 'Series'}")
         data.to_csv(filename, index=False)
 
@@ -147,8 +159,8 @@ def encode_full_data(df: pd.DataFrame, output_dir: str) -> str:
     os.makedirs(output_dir, exist_ok=True)
     print(f"🔄 Splitting and encoding data, saving to {output_dir}")
 
-    X.to_csv(os.path.join(output_dir, f"X_pred_{timestamp}.csv"), index=False)
-    y.to_csv(os.path.join(output_dir, f"y_pred_{timestamp}.csv"), index=False)
+    X.to_csv(get_storage_path("shared_data/preprocessed", f"X_pred_{timestamp}.csv"), index=False)
+    y.to_csv(get_storage_path("shared_data/preprocessed", f"y_pred_{timestamp}.csv"), index=False)
 
     print(f"✅ Prediction data saved to {output_dir}")
     print(f"➡️  Rows: {len(X)} | Positive ratio: {y.mean():.4f}")
@@ -181,19 +193,16 @@ def run_preprocessing(
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input_path", type=str, default="data/raw/fraudTest.csv")
-    parser.add_argument("--output_dir", type=str, default="data/processed")
+    parser.add_argument("--input_path", type=str, default=get_storage_path("shared_data/raw", "fraudTest.csv"))
+    parser.add_argument("--output_dir", type=str, default=get_storage_path("shared_data/preprocessed", ""))
     parser.add_argument("--no_log_amt", action="store_true")
     parser.add_argument("--for_prediction", action="store_true")
 
     args = parser.parse_args()
 
-    input_path = resolve_path("fraudTest.csv", io="input") if ENV == "PROD" else args.input_path
-    output_dir = resolve_path("", io="output") if ENV == "PROD" else args.output_dir
-
     run_preprocessing(
-        input_path=input_path,
-        output_dir=output_dir,
+        input_path=args.input_path,
+        output_dir=args.output_dir,
         log_amt=not args.no_log_amt,
         for_prediction=args.for_prediction
     )

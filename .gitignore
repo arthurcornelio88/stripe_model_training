@@ -17,5 +17,9 @@ data/
 catboost_info/
 mlruns/
 models/
+deployment/fraudTest.csv
+
+# Temporary build files
+shared_data/
 
 broullion.py

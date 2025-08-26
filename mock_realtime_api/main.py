@@ -7,13 +7,32 @@ from datetime import datetime
 import random
 import pandas as pd
 import numpy as np
+import os
 
 app = FastAPI()
 fake = Faker()
 
+# Environment-aware data loading
+ENV = os.getenv("ENV", "DEV")
+if ENV == "PROD":
+    # In production, data comes from GCS via StorageManager or mounted volume
+    FRAUD_DATA_PATH = os.getenv("SHARED_DATA_PATH", "/app/shared_data") + "/fraudTest.csv"
+else:
+    # In development, use local path
+    FRAUD_DATA_PATH = "/app/shared_data/fraudTest.csv"
+
+print(f"🔄 Mock API loading data from: {FRAUD_DATA_PATH}")
+
 # === Static data
-FRAUD_DATA_PATH = "/app/shared_data/fraudTest.csv"
-fraud_df = pd.read_csv(FRAUD_DATA_PATH, dtype={"cc_num": str, "zip": str})
+try:
+    fraud_df = pd.read_csv(FRAUD_DATA_PATH, dtype={"cc_num": str, "zip": str})
+    print(f"✅ Loaded {len(fraud_df)} fraud records")
+except Exception as e:
+    print(f"❌ Error loading fraud data: {e}")
+    # Fallback to minimal data
+    fraud_df = pd.DataFrame({"category": ["grocery"], "job": ["engineer"], "state": ["CA"], 
+                           "gender": ["M"], "is_fraud": [0], "merchant": ["Test"], 
+                           "city": ["SF"], "lat": [37.7], "long": [-122.4]})
 
 # === Precomputed distributions
 category_dist = fraud_df["category"].value_counts(normalize=True)
@@ -87,7 +106,9 @@ def generate_like(row: pd.Series, variability: float) -> dict:
 
 def generate_transactions(n: int, variability: float) -> List[dict]:
     synthetic = []
-    rows = fraud_df.sample(n=n).to_dict(orient="records")
+    # Ensure we don't sample more than available data
+    sample_size = min(n, len(fraud_df))
+    rows = fraud_df.sample(n=sample_size, replace=True if n > len(fraud_df) else False).to_dict(orient="records")
     
     for row in rows:
         tx = generate_like(pd.Series(row), variability)
@@ -102,8 +123,9 @@ def get_transactions(
     try:
         if variability <= 0.0:
             # Retourne des vraies lignes du CSV
-            sampled = fraud_df.sample(n=n, random_state=42).to_dict(orient="records") # #fraud_df.sample(n=n).to_dict(orient="records")
-            print(f"[VAR={variability:.2f}] Returning {n} real transactions.")
+            sample_size = min(n, len(fraud_df))
+            sampled = fraud_df.sample(n=sample_size, replace=True if n > len(fraud_df) else False, random_state=42).to_dict(orient="records")
+            print(f"[VAR={variability:.2f}] Returning {sample_size} real transactions.")
             return sampled
 
         elif variability >= 1.0:

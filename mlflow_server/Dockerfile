@@ -1,14 +1,14 @@
 FROM python:3.10-slim
 
-# Install MLflow and required extras
-RUN pip install --no-cache-dir mlflow==2.11.3
+# Installer MLflow et support GCS
+RUN pip install --no-cache-dir mlflow==2.11.3 google-cloud-storage
 
-# Create folders for artifacts
-RUN mkdir -p /mlflow/mlruns
-
-# Expose port
+# Port exposé
 EXPOSE 5000
 
-# Set working dir and command
-WORKDIR /mlflow
-CMD ["mlflow", "server", "--backend-store-uri", "/mlflow/mlruns", "--default-artifact-root", "/mlflow/mlruns", "--host", "0.0.0.0", "--port", "5000", "--serve-artifacts"]
+# Définir les variables d'environnement pour URIs
+ENV BACKEND_STORE_URI=""
+ENV ARTIFACT_ROOT=""
+
+# Commande MLflow qui utilise les variables
+CMD ["sh", "-c", "mlflow server --backend-store-uri $BACKEND_STORE_URI --default-artifact-root $ARTIFACT_ROOT --serve-artifacts --host 0.0.0.0 --port 5000"]
